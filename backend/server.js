@@ -156,15 +156,27 @@ const SHEET_CONFIG = {
   },
 };
 
-// Path to the service account key file used to authenticate with Google.
+// Path to the service account key file used to authenticate with Google
+// (local dev only - see below).
 const KEY_FILE_PATH = path.join(__dirname, "..", "google-key.json");
 
-// GoogleAuth reads the key file and handles getting us an access token.
-// We need full (read + write) access, since /call-status below updates rows.
-const auth = new google.auth.GoogleAuth({
-  keyFile: KEY_FILE_PATH,
+// In deployment there's usually no disk to put google-key.json on, so we
+// support passing the whole key as one env var (GOOGLE_KEY_JSON) instead.
+// Locally, it's simpler to just keep using the key file, so that stays the
+// fallback.
+const googleAuthOptions = {
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-});
+};
+if (process.env.GOOGLE_KEY_JSON) {
+  googleAuthOptions.credentials = JSON.parse(process.env.GOOGLE_KEY_JSON);
+} else {
+  googleAuthOptions.keyFile = KEY_FILE_PATH;
+}
+
+// GoogleAuth reads the key (from wherever we pointed it above) and handles
+// getting us an access token. We need full (read + write) access, since
+// /call-status below updates rows.
+const auth = new google.auth.GoogleAuth(googleAuthOptions);
 
 // Reads every row from the sheet, splitting the header row from the data
 // rows. We ask for a wide range (A1:Z) rather than a fixed number of columns,
