@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rhythm — Test AI Insights</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f7f9;
+      color: #1f2328;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.3rem;
+      margin-bottom: 0.25rem;
+    }
+
+    p.hint {
+      color: #57606a;
+      font-size: 0.85rem;
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      max-width: 700px;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      padding: 1.5rem;
+      max-width: 700px;
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.85rem;
+      margin-bottom: 0.4rem;
+    }
+
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 0.6rem;
+      border: 1px solid #d8d8dc;
+      border-radius: 6px;
+      resize: vertical;
+    }
+
+    input[type="number"] {
+      width: 80px;
+      padding: 0.4rem;
+      border: 1px solid #d8d8dc;
+      border-radius: 6px;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid #d8d8dc;
+      background: #f0f0f3;
+      cursor: pointer;
+      margin-right: 0.5rem;
+    }
+
+    button:hover {
+      background: #e6e6ea;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      background: #f7f7f9;
+      border-radius: 6px;
+      padding: 1rem;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+
+    .status {
+      font-size: 0.85rem;
+      color: #57606a;
+      margin-top: 0.6rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Test AI Insights</h1>
+  <p class="hint">
+    Paste a transcript - either a JSON array of <code>{speaker, text}</code> lines, or a plain
+    "Rep: ...&#10;Lead: ..." text block - and run it through the AI abstraction directly.
+    This does NOT place a real call and does NOT write anything to the sheet, so it's safe to
+    run over and over while tuning the prompt.
+  </p>
+
+  <div class="card">
+    <label for="transcriptInput">Transcript</label>
+    <textarea id="transcriptInput" rows="10" placeholder="Rep: Hi, is this a good time?
+Lead: Sure, go ahead."></textarea>
+
+    <label for="callNumberInput" style="margin-top: 1rem;">Call number</label>
+    <input type="number" id="callNumberInput" value="1" min="1">
+
+    <div style="margin-top: 1rem;">
+      <button id="loadLastButton">Load last real call</button>
+      <button id="runButton">Run insights</button>
+    </div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <label>AI Notes (what would be written to the sheet)</label>
+    <pre id="notesOutput">Nothing yet - click "Run insights".</pre>
+  </div>
+
+  <div class="card">
+    <label>Raw insights JSON</label>
+    <pre id="jsonOutput">Nothing yet.</pre>
+  </div>
+
+  <script>
+    const transcriptInput = document.getElementById("transcriptInput");
+    const callNumberInput = document.getElementById("callNumberInput");
+    const statusEl = document.getElementById("status");
+    const notesOutput = document.getElementById("notesOutput");
+    const jsonOutput = document.getElementById("jsonOutput");
+
+    // Loads the most recently saved real call's transcript into the textarea,
+    // so you don't have to copy/paste it from a terminal.
+    document.getElementById("loadLastButton").addEventListener("click", async () => {
+      statusEl.textContent = "Loading last real call...";
+
+      try {
+        const response = await fetch("/api/last-transcript");
+        const data = await response.json();
+
+        if (!response.ok) {
+          statusEl.textContent = data.error || "Could not load last transcript.";
+          return;
+        }
+
+        transcriptInput.value = JSON.stringify(data.transcript, null, 2);
+        callNumberInput.value = data.callNumber || 1;
+        statusEl.textContent = `Loaded call with ${data.phone || "unknown number"} (saved ${data.savedAt || "?"}).`;
+      } catch (error) {
+        statusEl.textContent = "Could not reach the server.";
+      }
+    });
+
+    // Sends whatever is in the textarea to /api/test-insights and shows the result
+    document.getElementById("runButton").addEventListener("click", async () => {
+      statusEl.textContent = "Running...";
+      notesOutput.textContent = "";
+      jsonOutput.textContent = "";
+
+      const rawText = transcriptInput.value.trim();
+      if (!rawText) {
+        statusEl.textContent = "Paste a transcript first.";
+        return;
+      }
+
+      // Try to parse it as JSON (an array of {speaker, text}) - if that
+      // fails, just send the raw text as-is (a plain labelled text block).
+      let transcript;
+      try {
+        transcript = JSON.parse(rawText);
+      } catch (error) {
+        transcript = rawText;
+      }
+
+      try {
+        const response = await fetch("/api/test-insights", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript,
+            callNumber: Number(callNumberInput.value) || 1,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          statusEl.textContent = data.error || "Something went wrong.";
+          return;
+        }
+
+        statusEl.textContent = "Done.";
+        notesOutput.textContent = data.aiNotes;
+        jsonOutput.textContent = JSON.stringify(data.insights, null, 2);
+      } catch (error) {
+        statusEl.textContent = "Could not reach the server.";
+      }
+    });
+  </script>
+</body>
+</html>

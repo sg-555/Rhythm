@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Rhythm — Call-backs</title>
+
+  <!-- Twilio's browser calling library (loaded from a CDN, no install needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.3/dist/twilio.min.js"></script>
+
+  <style>
+    /* Same basic page setup as index.html, so the two pages feel consistent */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f7f9;
+      color: #1f2328;
+      margin: 0;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .page-subtitle {
+      margin: 0 0 1rem 0;
+      color: #57606a;
+      font-size: 0.9rem;
+    }
+
+    /* The row at the very top of every page: tab navigation on the left,
+       who's-signed-in + Sign out on the right. */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #e2e2e6;
+    }
+
+    /* Clean tab navigation, same on every page (Leads / Call-backs /
+       Analytics) - the ONE consistent way to move between pages. */
+    .tab-nav {
+      display: flex;
+      gap: 0.25rem;
+    }
+
+    .tab-link {
+      padding: 0.6rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #57606a;
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+    }
+
+    .tab-link:hover {
+      color: #1f2328;
+    }
+
+    .tab-link.active {
+      color: #1d4ed8;
+      border-bottom-color: #1d4ed8;
+    }
+
+    .user-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+      color: #57606a;
+      padding: 0 0.25rem;
+    }
+
+    .sign-out-button {
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #57606a;
+      background: #f0f0f3;
+      border: 1px solid #d8d8dc;
+      border-radius: 6px;
+      padding: 0.3rem 0.7rem;
+      cursor: pointer;
+    }
+
+    .sign-out-button:hover {
+      background: #e6e6ea;
+    }
+
+    /* Full-page overlay shown INSTEAD of the app when nobody's signed in. */
+    .sign-in-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #f7f7f9;
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .sign-in-card {
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      padding: 2.5rem 3rem;
+      text-align: center;
+      max-width: 360px;
+    }
+
+    .sign-in-card h1 {
+      margin: 0 0 0.5rem 0;
+    }
+
+    .sign-in-card p {
+      color: #57606a;
+      font-size: 0.95rem;
+      margin: 0 0 1.5rem 0;
+    }
+
+    .google-signin-button {
+      display: inline-block;
+      background: #1d4ed8;
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 6px;
+    }
+
+    .google-signin-button:hover {
+      background: #1739a8;
+    }
+
+    .device-status {
+      font-size: 0.85rem;
+      color: #57606a;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      max-width: 800px;
+      padding: 1.25rem 1.5rem;
+    }
+
+    .message {
+      padding: 1.5rem;
+      color: #57606a;
+      font-size: 0.95rem;
+    }
+
+    .call-button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #1f2328;
+      background: #f0f0f3;
+      border: 1px solid #d8d8dc;
+      border-radius: 6px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+    }
+
+    .call-button:hover {
+      background: #e6e6ea;
+    }
+
+    /* Shown on every OTHER lead's Call button while a call is active
+       elsewhere - same as index.html. */
+    .call-button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    .call-button:disabled:hover {
+      background: #f0f0f3;
+    }
+
+    .hangup-button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #ffffff;
+      background: #d92d20;
+      border: 1px solid #d92d20;
+      border-radius: 6px;
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+    }
+
+    .hangup-button:hover {
+      background: #b42318;
+    }
+
+    .call-status {
+      margin-left: 0.6rem;
+      font-size: 0.85rem;
+      color: #57606a;
+    }
+
+    /* The coloured Cold/Warm/Hot temperature badge - same as index.html */
+    .temp-badge {
+      display: inline-block;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .temp-cold { background: #eaf2ff; color: #1d4ed8; }
+    .temp-warm { background: #fff4e5; color: #b45309; }
+    .temp-hot { background: #fdecea; color: #b42318; }
+    .temp-none { background: #f0f0f3; color: #57606a; }
+
+    .callback-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    /* One call-back: name/phone/temperature/reason/stage/notes on the left,
+       Call controls on the right. Clickable (except the Call/Hang Up
+       buttons) to open the same full detail panel as the main leads page.
+       Calm/neutral by default - a plain grey left border, nothing alarming. */
+    .callback-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem 0.9rem;
+      background: #f7f7f9;
+      border-left: 3px solid #d8d8dc;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* Highlighted: this one is due now, OR its call-back time is within the
+       hour - amber, same "needs attention soon" colour used everywhere else
+       in the app (never red/alarm-coloured - see the calm-tone rule). */
+    .callback-item.highlighted {
+      background: #fff4e5;
+      border-left-color: #b45309;
+    }
+
+    .callback-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .callback-reason {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #57606a;
+    }
+
+    /* Small "Stage: ... / Notes: ..." preview line - the same info the main
+       leads table shows, so this page isn't a stripped-down view. */
+    .callback-item-details {
+      margin: 0;
+      font-size: 0.8rem;
+      color: #8a8f98;
+    }
+
+    /* Dark overlay behind the side panel - clicking it closes the panel */
+    .panel-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.25);
+      z-index: 10;
+    }
+
+    .panel-overlay.open {
+      display: block;
+    }
+
+    /* The side panel itself - slides in from the right when opened. Same
+       panel as index.html's, copied here so a rep working through call-backs
+       gets the exact same full context (AI notes, history, stage, etc). */
+    .lead-panel {
+      position: fixed;
+      top: 0;
+      right: -440px;
+      width: 440px;
+      max-width: 90vw;
+      height: 100vh;
+      background: #ffffff;
+      box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+      z-index: 11;
+      overflow-y: auto;
+      box-sizing: border-box;
+      transition: right 0.2s ease;
+    }
+
+    .lead-panel.open {
+      right: 0;
+    }
+
+    .panel-close-button {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      border: none;
+      background: none;
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+      color: #57606a;
+    }
+
+    .panel-content {
+      padding: 1.5rem;
+    }
+
+    .panel-header h2 {
+      margin: 0 0 0.25rem 0;
+      font-size: 1.25rem;
+    }
+
+    .panel-phone {
+      margin: 0 0 0.75rem 0;
+      color: #57606a;
+      font-size: 0.9rem;
+    }
+
+    .panel-section {
+      padding: 1rem 0;
+    }
+
+    .panel-section + .panel-section {
+      border-top: 1px solid #eeeeef;
+    }
+
+    .panel-section-title {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #57606a;
+    }
+
+    .call-stats-strip {
+      margin: 0.25rem 0 0 0;
+      font-size: 0.78rem;
+      color: #8a8f98;
+    }
+
+    .ai-note-line {
+      margin: 0 0 0.5rem 0;
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .ai-note-line strong {
+      font-weight: 600;
+    }
+
+    .ai-headline {
+      margin: 0 0 0.6rem 0;
+      font-size: 0.95rem;
+      font-weight: 500;
+      font-style: italic;
+      color: #57606a;
+    }
+
+    .previous-calls-text {
+      margin: 0;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      color: #1f2328;
+      white-space: pre-wrap;
+    }
+
+    .current-stage-line {
+      font-size: 0.9rem;
+      margin: 0 0 0.5rem 0;
+    }
+
+    .suggested-stage-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.9rem;
+    }
+
+    .accept-button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #ffffff;
+      background: #1d4ed8;
+      border: 1px solid #1d4ed8;
+      border-radius: 6px;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+    }
+
+    .accept-button:hover {
+      background: #1739a8;
+    }
+
+    .accept-button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    .notes-textarea {
+      width: 100%;
+      min-height: 100px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: 0.6rem;
+      border: 1px solid #d8d8dc;
+      border-radius: 6px;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+
+    .save-button {
+      margin-top: 0.6rem;
+    }
+
+    .callback-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .callback-row input[type="datetime-local"] {
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.5rem;
+      border: 1px solid #d8d8dc;
+      border-radius: 6px;
+    }
+
+    /* Gentle "that's close to another call-back" suggestion - calm blue,
+       not an error/warning colour. Same spacing check as the main page. */
+    .callback-suggestion {
+      display: none;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      background: #eef2ff;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Shown INSTEAD of the app until GET /api/me says someone's signed in -
+       see checkSignedIn(). -->
+  <div id="signInOverlay" class="sign-in-overlay">
+    <div class="sign-in-card">
+      <h1>Rhythm</h1>
+      <p>Sign in with your Google account to manage your leads.</p>
+      <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
+    </div>
+  </div>
+
+  <!-- Same top bar on every page. This page marks "Call-backs" as active. -->
+  <div class="top-bar">
+    <nav class="tab-nav">
+      <a href="index.html" class="tab-link">Leads</a>
+      <a href="callbacks.html" class="tab-link active">Call-backs</a>
+      <a href="analytics.html" class="tab-link">Analytics</a>
+    </nav>
+    <div class="user-bar">
+      <span id="userBarName"></span>
+      <button id="signOutButton" class="sign-out-button">Sign out</button>
+    </div>
+  </div>
+
+  <h1>Call-backs</h1>
+  <p class="page-subtitle">Everything due now, plus everything upcoming - soonest/most-overdue first.</p>
+  <p id="deviceStatus" class="device-status">Setting up calling...</p>
+
+  <div class="card">
+    <!-- We fill this container with the combined list, or a friendly message -->
+    <div id="callbacksContainer" class="message">Loading...</div>
+  </div>
+
+  <!-- Lead detail side panel - identical to index.html's, so clicking a due
+       lead here gives the exact same full context (temperature, AI notes,
+       previous calls, stage, call-back, human notes). -->
+  <div id="panelOverlay" class="panel-overlay"></div>
+  <div id="leadPanel" class="lead-panel">
+    <button id="panelCloseButton" class="panel-close-button" aria-label="Close">×</button>
+    <div id="panelContent" class="panel-content"></div>
+  </div>
+
+  <script>
+    const callbacksContainer = document.getElementById("callbacksContainer");
+    const deviceStatus = document.getElementById("deviceStatus");
+
+    // ── Sign-in gate ─────────────────────────────────────────────────────
+    // Same pattern on every page - see index.html's copy of this for the
+    // full explanation.
+    const signInOverlay = document.getElementById("signInOverlay");
+    const userBarName = document.getElementById("userBarName");
+    const signOutButton = document.getElementById("signOutButton");
+
+    async function checkSignedIn() {
+      try {
+        const response = await fetch("/api/me");
+        const data = await response.json();
+
+        if (!data.user) {
+          signInOverlay.style.display = "flex";
+          return false;
+        }
+
+        signInOverlay.style.display = "none";
+        userBarName.textContent = data.user.name || data.user.email;
+        return true;
+      } catch (error) {
+        signInOverlay.style.display = "flex";
+        return false;
+      }
+    }
+
+    signOutButton.addEventListener("click", async () => {
+      await fetch("/auth/logout", { method: "POST" });
+      location.reload();
+    });
+
+    // Call-backs must be spaced at least this many minutes apart - same
+    // tunable constant and rule as the main leads page.
+    const MIN_CALLBACK_GAP_MINUTES = 10;
+
+    // A call-back within this long from now gets highlighted (amber) in the
+    // list, same as the "due soon" flag on the main leads page - same
+    // tunable constant, so the two pages always agree on "soon" means.
+    const REMINDER_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+    // The full lead list (from /api/leads), used for two things on this
+    // page: (1) showing Stage/Notes in each due item's summary, since
+    // /api/leads/due only returns the due-specific fields, and (2) the
+    // call-back spacing check below (needs every OTHER lead's call-back time).
+    let allLeads = [];
+
+    // These hold the current Twilio "Device" (our virtual phone) and the
+    // call currently in progress, if any. Only one call can be active at a
+    // time. Same pattern as index.html, but this page has no live transcript
+    // or AI coach panel - it's just for working through call-backs.
+    let device = null;
+    let activeCall = null;
+
+    // Which lead's phone number is currently being called (or null) - lets
+    // every Call/Hang Up button for that SAME lead (e.g. the list item AND
+    // the open detail panel) show "Hang Up" together, and every OTHER
+    // lead's button show as disabled. Same pattern as index.html.
+    let activeCallPhone = null;
+
+    // Every Call/Hang Up button pair created on this page, so starting or
+    // ending a call can update ALL of them together - see attachCallHandlers.
+    const callButtonInstances = [];
+
+    // Asks the browser for microphone access. A call can't work without this.
+    async function requestMicrophonePermission() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      } catch (error) {
+        deviceStatus.textContent = "Microphone permission is required to make calls.";
+        return false;
+      }
+    }
+
+    // Sets up the Twilio Device using a token from our backend, so the
+    // browser itself can place calls (no page reload needed per call).
+    async function setupCallingDevice() {
+      const micGranted = await requestMicrophonePermission();
+      if (!micGranted) return;
+
+      try {
+        const response = await fetch("/api/token");
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not get a calling token");
+        }
+
+        device = new Twilio.Device(data.token);
+
+        device.on("error", (error) => {
+          deviceStatus.textContent = "Calling error: " + error.message;
+        });
+
+        await device.register();
+        deviceStatus.textContent = "Ready to make calls.";
+      } catch (error) {
+        deviceStatus.textContent = "Could not set up calling: " + error.message;
+      }
+    }
+
+    // ── Keeping every Call/Hang Up button in sync ───────────────────────
+    // The same lead can appear more than once on this page (its list item
+    // AND its open detail panel) - these two functions make sure all of a
+    // lead's buttons show the same thing, and any OTHER lead's button is
+    // disabled instead of quietly doing nothing if clicked. Same pattern as
+    // index.html.
+
+    function refreshOneCallButton(instance) {
+      if (!activeCallPhone) {
+        instance.callButton.disabled = false;
+        instance.callButton.textContent = instance.originalCallLabel;
+        instance.callButton.style.display = "inline-block";
+        instance.hangupButton.style.display = "none";
+      } else if (instance.phone === activeCallPhone) {
+        instance.callButton.style.display = "none";
+        instance.hangupButton.style.display = "inline-block";
+      } else {
+        instance.callButton.disabled = true;
+        instance.callButton.textContent = "Call in progress";
+        instance.callButton.style.display = "inline-block";
+        instance.hangupButton.style.display = "none";
+      }
+    }
+
+    function refreshAllCallButtons(statusMessage) {
+      callButtonInstances.forEach((instance) => {
+        refreshOneCallButton(instance);
+        if (statusMessage !== undefined && instance.phone === activeCallPhone) {
+          instance.callStatus.textContent = statusMessage;
+        }
+      });
+    }
+
+    // Runs once, whenever the active call finishes, however it finished.
+    // Shows the final message on the lead's buttons, then resets the shared
+    // state AND every button back to normal.
+    function endActiveCall(message) {
+      callButtonInstances
+        .filter((instance) => instance.phone === activeCallPhone)
+        .forEach((instance) => {
+          instance.callStatus.textContent = message;
+        });
+
+      activeCall = null;
+      activeCallPhone = null;
+      refreshAllCallButtons();
+    }
+
+    // Wires up a Call/Hang Up button pair for one phone number. Same calling
+    // logic as index.html, minus the live transcript feed - this page has
+    // nowhere to show it. stopPropagation() keeps a click on these buttons
+    // from also opening the call-back item's detail panel.
+    function attachCallHandlers(phone, callButton, hangupButton, callStatus) {
+      // Remember this button's own label before anything else touches it,
+      // so refreshOneCallButton can restore the right wording later.
+      const instance = { phone, callButton, hangupButton, callStatus, originalCallLabel: callButton.textContent };
+      callButtonInstances.push(instance);
+      refreshOneCallButton(instance); // match reality right away
+
+      callButton.addEventListener("click", async (event) => {
+        event.stopPropagation();
+
+        if (!device) {
+          callStatus.textContent = "Calling isn't ready yet - please wait a moment.";
+          return;
+        }
+
+        if (activeCall) {
+          // Shouldn't normally happen, since every other lead's button is
+          // disabled while a call is active - kept as a safety net.
+          callStatus.textContent = "Finish your current call first.";
+          return;
+        }
+
+        activeCallPhone = phone;
+        refreshAllCallButtons("Connecting...");
+
+        try {
+          activeCall = await device.connect({ params: { To: phone } });
+
+          activeCall.on("accept", () => refreshAllCallButtons("In Call"));
+          activeCall.on("disconnect", () => endActiveCall("Call ended"));
+          activeCall.on("cancel", () => endActiveCall("Call cancelled"));
+          activeCall.on("error", (error) => endActiveCall("Call error: " + error.message));
+        } catch (error) {
+          endActiveCall("Could not start call: " + error.message);
+        }
+      });
+
+      hangupButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (activeCall) activeCall.disconnect();
+      });
+    }
+
+    // Turns a 0-5 temperature number into a coloured badge (Cold/Warm/Hot) -
+    // same rendering as index.html.
+    function renderTemperatureBadge(lead) {
+      const badge = document.createElement("span");
+
+      if (lead.temperatureValue === null) {
+        badge.className = "temp-badge temp-none";
+        badge.textContent = "No calls yet";
+        return badge;
+      }
+
+      const value = lead.temperatureValue;
+      let word, colorClass;
+      if (value <= 1) {
+        word = "Cold";
+        colorClass = "temp-cold";
+      } else if (value <= 3) {
+        word = "Warm";
+        colorClass = "temp-warm";
+      } else {
+        word = "Hot";
+        colorClass = "temp-hot";
+      }
+
+      badge.className = "temp-badge " + colorClass;
+      badge.textContent = `${word} (${value}/5)`;
+      return badge;
+    }
+
+    // ── Lead detail side panel ──────────────────────────────────────────
+    // Identical to index.html's panel - same sections, same behavior - so a
+    // rep working through call-backs here gets the exact same full context
+    // (AI notes, previous-calls history, stage, call-back, human notes).
+
+    const panelOverlay = document.getElementById("panelOverlay");
+    const leadPanel = document.getElementById("leadPanel");
+    const panelContent = document.getElementById("panelContent");
+    const panelCloseButton = document.getElementById("panelCloseButton");
+
+    function closeLeadPanel() {
+      leadPanel.classList.remove("open");
+      panelOverlay.classList.remove("open");
+    }
+
+    panelCloseButton.addEventListener("click", closeLeadPanel);
+    panelOverlay.addEventListener("click", closeLeadPanel);
+
+    function makeSectionTitle(text) {
+      const title = document.createElement("h3");
+      title.className = "panel-section-title";
+      title.textContent = text;
+      return title;
+    }
+
+    function makeSection(titleText, contentEl) {
+      const section = document.createElement("section");
+      section.className = "panel-section";
+      section.appendChild(makeSectionTitle(titleText));
+      section.appendChild(contentEl);
+      return section;
+    }
+
+    function renderCallStatsStrip(lead) {
+      const strip = document.createElement("p");
+      strip.className = "call-stats-strip";
+
+      const parts = [];
+      if (lead.attempts) parts.push(`${lead.attempts} attempt${lead.attempts === "1" ? "" : "s"}`);
+      if (lead.lastCalled) parts.push(`Last called ${lead.lastCalled}`);
+      if (lead.firstConnected) parts.push(`First connected ${lead.firstConnected}`);
+
+      strip.textContent = parts.length > 0 ? parts.join(" · ") : "No calls yet";
+      return strip;
+    }
+
+    function renderPanelHeader(lead) {
+      const header = document.createElement("div");
+      header.className = "panel-header";
+
+      const name = document.createElement("h2");
+      name.textContent = lead.name || "(no name)";
+      header.appendChild(name);
+
+      const phone = document.createElement("p");
+      phone.className = "panel-phone";
+      phone.textContent = lead.phone;
+      header.appendChild(phone);
+
+      const callButton = document.createElement("button");
+      callButton.className = "call-button";
+      callButton.textContent = "Call";
+
+      const hangupButton = document.createElement("button");
+      hangupButton.className = "hangup-button";
+      hangupButton.textContent = "Hang Up";
+      hangupButton.style.display = "none";
+
+      const callStatus = document.createElement("span");
+      callStatus.className = "call-status";
+
+      attachCallHandlers(lead.phone, callButton, hangupButton, callStatus);
+
+      header.appendChild(callButton);
+      header.appendChild(hangupButton);
+      header.appendChild(callStatus);
+
+      return header;
+    }
+
+    function makeNoteLine(emoji, label, value) {
+      const line = document.createElement("p");
+      line.className = "ai-note-line";
+
+      line.appendChild(document.createTextNode(emoji + " "));
+
+      const strong = document.createElement("strong");
+      strong.textContent = label + ": ";
+      line.appendChild(strong);
+
+      line.appendChild(document.createTextNode(value));
+
+      return line;
+    }
+
+    function renderAiNotesSection(lead) {
+      const container = document.createElement("div");
+      const parsed = lead.aiNotesParsed;
+
+      if (!lead.aiNotes) {
+        const empty = document.createElement("p");
+        empty.className = "message";
+        empty.textContent = "No AI notes yet - this lead hasn't had a call analyzed.";
+        container.appendChild(empty);
+        return container;
+      }
+
+      const hasParsedFields =
+        parsed.positives || parsed.concerns || parsed.commitments || parsed.nextCall || parsed.researchPrep;
+
+      if (!hasParsedFields) {
+        const raw = document.createElement("p");
+        raw.className = "ai-note-line";
+        raw.textContent = lead.aiNotes;
+        container.appendChild(raw);
+        return container;
+      }
+
+      if (parsed.headline) {
+        const headline = document.createElement("p");
+        headline.className = "ai-headline";
+        headline.textContent = parsed.headline;
+        container.appendChild(headline);
+      }
+
+      if (parsed.positives) container.appendChild(makeNoteLine("✅", "Positives", parsed.positives));
+      if (parsed.concerns) container.appendChild(makeNoteLine("⚠️", "Concerns", parsed.concerns));
+      if (parsed.commitments) container.appendChild(makeNoteLine("🤝", "Agreed", parsed.commitments));
+      if (parsed.nextCall) container.appendChild(makeNoteLine("👉", "Next call", parsed.nextCall));
+      if (parsed.researchPrep) container.appendChild(makeNoteLine("🔍", "Research/Prep", parsed.researchPrep));
+      if (parsed.suggestedStage) container.appendChild(makeNoteLine("📌", "Suggested stage", parsed.suggestedStage));
+
+      return container;
+    }
+
+    function renderSuggestedStageSection(lead) {
+      const container = document.createElement("div");
+
+      const currentStageLine = document.createElement("p");
+      currentStageLine.className = "current-stage-line";
+      const currentStrong = document.createElement("strong");
+      currentStrong.textContent = "Current stage: ";
+      currentStageLine.appendChild(currentStrong);
+      const currentStageValue = document.createElement("span");
+      currentStageValue.textContent = lead.stage || "(none)";
+      currentStageLine.appendChild(currentStageValue);
+      container.appendChild(currentStageLine);
+
+      const suggestedStage = lead.aiNotesParsed.suggestedStage;
+
+      if (!suggestedStage || suggestedStage === lead.stage) {
+        return container;
+      }
+
+      const row = document.createElement("div");
+      row.className = "suggested-stage-row";
+
+      const label = document.createElement("span");
+      label.textContent = `Suggested: ${suggestedStage}`;
+      row.appendChild(label);
+
+      const acceptButton = document.createElement("button");
+      acceptButton.className = "accept-button";
+      acceptButton.textContent = "Accept";
+      row.appendChild(acceptButton);
+
+      const status = document.createElement("span");
+      status.className = "call-status";
+      row.appendChild(status);
+
+      acceptButton.addEventListener("click", async () => {
+        acceptButton.disabled = true;
+        status.textContent = "Saving...";
+
+        try {
+          const response = await fetch(`/api/leads/${encodeURIComponent(lead.phone)}/stage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ stage: suggestedStage }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not update stage.");
+
+          currentStageValue.textContent = suggestedStage;
+          status.textContent = "Saved.";
+          acceptButton.remove();
+        } catch (error) {
+          acceptButton.disabled = false;
+          status.textContent = "Error: " + error.message;
+        }
+      });
+
+      container.appendChild(row);
+      return container;
+    }
+
+    function renderHumanNotesSection(lead) {
+      const container = document.createElement("div");
+
+      const textarea = document.createElement("textarea");
+      textarea.className = "notes-textarea";
+      textarea.value = lead.notes || "";
+      container.appendChild(textarea);
+
+      const saveButton = document.createElement("button");
+      saveButton.className = "call-button save-button";
+      saveButton.textContent = "Save";
+      container.appendChild(saveButton);
+
+      const status = document.createElement("span");
+      status.className = "call-status";
+      container.appendChild(status);
+
+      saveButton.addEventListener("click", async () => {
+        status.textContent = "Saving...";
+
+        try {
+          const response = await fetch(`/api/leads/${encodeURIComponent(lead.phone)}/notes`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes: textarea.value }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not save notes.");
+
+          status.textContent = "Saved.";
+        } catch (error) {
+          status.textContent = "Error: " + error.message;
+        }
+      });
+
+      return container;
+    }
+
+    function toDatetimeLocalValue(dateText) {
+      if (!dateText) return "";
+      const date = new Date(dateText);
+      if (isNaN(date)) return "";
+      return dateToDatetimeLocalValue(date);
+    }
+
+    function dateToDatetimeLocalValue(date) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function formatTimeForSuggestion(date) {
+      return date.toLocaleString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    // Finds the earliest time >= candidateDate that is at least the gap away
+    // from EVERY time in existingDates - same algorithm as index.html.
+    function findNextFreeCallbackTime(candidateDate, existingDates, gapMinutes) {
+      const gapMs = gapMinutes * 60 * 1000;
+      let candidateMs = candidateDate.getTime();
+
+      let movedForward = true;
+      while (movedForward) {
+        movedForward = false;
+        for (const existing of existingDates) {
+          const diff = Math.abs(candidateMs - existing.getTime());
+          if (diff < gapMs) {
+            const pastThisZone = existing.getTime() + gapMs;
+            if (pastThisZone > candidateMs) {
+              candidateMs = pastThisZone;
+              movedForward = true;
+            }
+          }
+        }
+      }
+
+      return new Date(candidateMs);
+    }
+
+    function updateCurrentCallbackLine(lineEl, callBackOnText) {
+      lineEl.innerHTML = "";
+
+      const strong = document.createElement("strong");
+      strong.textContent = "Call-back: ";
+      lineEl.appendChild(strong);
+      lineEl.appendChild(document.createTextNode(callBackOnText || "Not set"));
+    }
+
+    // Renders the manual "Set call-back" control - identical behavior to
+    // index.html's, including the gentle spacing suggestion (uses allLeads,
+    // fetched separately on this page - see loadAllLeads below).
+    function renderCallbackSection(lead) {
+      const container = document.createElement("div");
+
+      if (!lead.firstConnected) {
+        const note = document.createElement("p");
+        note.className = "message";
+        note.textContent = "Call-back available after first connection.";
+        container.appendChild(note);
+        return container;
+      }
+
+      const currentLine = document.createElement("p");
+      currentLine.className = "current-stage-line";
+      updateCurrentCallbackLine(currentLine, lead.callBackOn);
+      container.appendChild(currentLine);
+
+      const row = document.createElement("div");
+      row.className = "callback-row";
+
+      const input = document.createElement("input");
+      input.type = "datetime-local";
+      input.value = toDatetimeLocalValue(lead.callBackOn);
+      row.appendChild(input);
+
+      const saveButton = document.createElement("button");
+      saveButton.className = "call-button";
+      saveButton.textContent = "Save";
+      row.appendChild(saveButton);
+
+      const clearButton = document.createElement("button");
+      clearButton.className = "call-button";
+      clearButton.textContent = "Clear";
+      row.appendChild(clearButton);
+
+      container.appendChild(row);
+
+      const suggestion = document.createElement("div");
+      suggestion.className = "callback-suggestion";
+      container.appendChild(suggestion);
+
+      const status = document.createElement("span");
+      status.className = "call-status";
+      container.appendChild(status);
+
+      async function saveCallback(value) {
+        status.textContent = "Saving...";
+
+        try {
+          const response = await fetch(`/api/leads/${encodeURIComponent(lead.phone)}/callback`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ callBackOn: value }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not save call-back time.");
+
+          lead.callBackOn = data.callBackOn;
+          updateCurrentCallbackLine(currentLine, data.callBackOn);
+          input.value = toDatetimeLocalValue(data.callBackOn);
+          status.textContent = "Saved.";
+        } catch (error) {
+          status.textContent = "Error: " + error.message;
+        }
+      }
+
+      function showSpacingSuggestion(suggestedDate, originalDate) {
+        suggestion.innerHTML = "";
+        suggestion.style.display = "flex";
+
+        const text = document.createElement("span");
+        text.textContent = `That's close to another call-back. How about ${formatTimeForSuggestion(suggestedDate)}?`;
+        suggestion.appendChild(text);
+
+        const useSuggestedButton = document.createElement("button");
+        useSuggestedButton.className = "call-button";
+        useSuggestedButton.textContent = "Use this time";
+        suggestion.appendChild(useSuggestedButton);
+
+        const keepOriginalButton = document.createElement("button");
+        keepOriginalButton.className = "call-button";
+        keepOriginalButton.textContent = "Keep my time";
+        suggestion.appendChild(keepOriginalButton);
+
+        useSuggestedButton.addEventListener("click", () => {
+          suggestion.style.display = "none";
+          input.value = dateToDatetimeLocalValue(suggestedDate);
+          saveCallback(input.value);
+        });
+
+        keepOriginalButton.addEventListener("click", () => {
+          suggestion.style.display = "none";
+          saveCallback(dateToDatetimeLocalValue(originalDate));
+        });
+      }
+
+      saveButton.addEventListener("click", () => {
+        if (!input.value) {
+          status.textContent = "Pick a date/time first (or use Clear).";
+          return;
+        }
+
+        const candidateDate = new Date(input.value);
+        const existingDates = allLeads
+          .filter((otherLead) => otherLead.Phone !== lead.phone && otherLead.CallBackOn)
+          .map((otherLead) => new Date(otherLead.CallBackOn))
+          .filter((date) => !isNaN(date));
+
+        const gapMs = MIN_CALLBACK_GAP_MINUTES * 60 * 1000;
+        const tooClose = existingDates.some((date) => Math.abs(candidateDate - date) < gapMs);
+
+        if (tooClose) {
+          const suggested = findNextFreeCallbackTime(candidateDate, existingDates, MIN_CALLBACK_GAP_MINUTES);
+          showSpacingSuggestion(suggested, candidateDate);
+        } else {
+          saveCallback(input.value);
+        }
+      });
+
+      clearButton.addEventListener("click", () => {
+        input.value = "";
+        suggestion.style.display = "none";
+        saveCallback("");
+      });
+
+      return container;
+    }
+
+    // Builds the whole panel's contents for one lead - identical section
+    // order to index.html, so the experience matches exactly.
+    // Renders the "Send Follow-up SMS" section - identical to index.html's,
+    // so a rep working through call-backs here has the exact same tool.
+    // "Draft with AI" fills the text box (rep can freely edit); "Send" works
+    // even if drafting failed or was never used, since they're independent.
+    function renderSmsSection(lead) {
+      const container = document.createElement("div");
+
+      const recipientLine = document.createElement("p");
+      recipientLine.className = "current-stage-line";
+      const recipientStrong = document.createElement("strong");
+      recipientStrong.textContent = "To: ";
+      recipientLine.appendChild(recipientStrong);
+      recipientLine.appendChild(document.createTextNode(lead.phone));
+      container.appendChild(recipientLine);
+
+      const textarea = document.createElement("textarea");
+      textarea.className = "notes-textarea";
+      textarea.placeholder = 'Click "Draft with AI", or type your own message...';
+      container.appendChild(textarea);
+
+      const buttonRow = document.createElement("div");
+      buttonRow.className = "callback-row";
+
+      const draftButton = document.createElement("button");
+      draftButton.className = "call-button";
+      draftButton.textContent = "Draft with AI";
+      buttonRow.appendChild(draftButton);
+
+      const sendButton = document.createElement("button");
+      sendButton.className = "call-button";
+      sendButton.textContent = "Send";
+      buttonRow.appendChild(sendButton);
+
+      container.appendChild(buttonRow);
+
+      const status = document.createElement("span");
+      status.className = "call-status";
+      container.appendChild(status);
+
+      draftButton.addEventListener("click", async () => {
+        draftButton.disabled = true;
+        status.textContent = "Drafting...";
+
+        try {
+          const response = await fetch(`/api/leads/${encodeURIComponent(lead.phone)}/draft-sms`, {
+            method: "POST",
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not draft a message.");
+
+          textarea.value = data.draft;
+          status.textContent = "Draft ready - feel free to edit before sending.";
+        } catch (error) {
+          status.textContent = "Error: " + error.message;
+        } finally {
+          draftButton.disabled = false;
+        }
+      });
+
+      sendButton.addEventListener("click", async () => {
+        if (!textarea.value.trim()) {
+          status.textContent = "Write or draft a message first.";
+          return;
+        }
+
+        sendButton.disabled = true;
+        status.textContent = "Sending...";
+
+        try {
+          const response = await fetch(`/api/leads/${encodeURIComponent(lead.phone)}/send-sms`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: textarea.value }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not send the message.");
+
+          status.textContent = "Sent!";
+        } catch (error) {
+          status.textContent = "Error: " + error.message;
+        } finally {
+          sendButton.disabled = false;
+        }
+      });
+
+      return container;
+    }
+
+    function renderLeadPanel(lead) {
+      panelContent.innerHTML = "";
+
+      panelContent.appendChild(renderPanelHeader(lead));
+      panelContent.appendChild(renderCallStatsStrip(lead));
+
+      panelContent.appendChild(makeSection("Temperature", renderTemperatureBadge(lead)));
+      panelContent.appendChild(makeSection("AI Notes", renderAiNotesSection(lead)));
+
+      const previousCalls = document.createElement("p");
+      previousCalls.className = "previous-calls-text";
+      previousCalls.textContent = lead.previousCalls || "No call history yet.";
+      panelContent.appendChild(makeSection("Previous Calls", previousCalls));
+
+      panelContent.appendChild(makeSection("Suggested Stage", renderSuggestedStageSection(lead)));
+      panelContent.appendChild(makeSection("Call-back", renderCallbackSection(lead)));
+      panelContent.appendChild(makeSection("Notes", renderHumanNotesSection(lead)));
+      panelContent.appendChild(makeSection("Send Follow-up SMS", renderSmsSection(lead)));
+    }
+
+    // Opens the panel for one lead (looked up fresh by phone number, so it
+    // always shows the latest sheet data).
+    async function openLeadPanel(phone) {
+      leadPanel.classList.add("open");
+      panelOverlay.classList.add("open");
+      panelContent.innerHTML = '<p class="message">Loading...</p>';
+
+      try {
+        const response = await fetch(`/api/leads/${encodeURIComponent(phone)}`);
+        const lead = await response.json();
+        if (!response.ok) throw new Error(lead.error || "Could not load lead.");
+
+        renderLeadPanel(lead);
+      } catch (error) {
+        panelContent.textContent = "Couldn't load this lead: " + error.message;
+      }
+    }
+
+    // ── Combined call-backs list (due + upcoming, one chronological list) ──
+    // This page's whole purpose: show EVERYTHING - due now (past/triggered)
+    // and upcoming (future, manually scheduled) - so the rep always sees the
+    // whole picture regardless of timing, sorted most-overdue/soonest first.
+
+    // Looks up a lead's full record (Stage/Notes/temperature) from allLeads,
+    // matched by phone number - /api/leads/due doesn't include those fields,
+    // so we cross-reference the full list already fetched for the spacing
+    // check, rather than adding a second backend endpoint just for this.
+    function findFullLeadByPhone(phone) {
+      return allLeads.find((full) => full.Phone === phone);
+    }
+
+    // Picks out every lead with a manual call-back time that's still in the
+    // FUTURE, sorted soonest-first - same logic as the main leads page's
+    // "Call-backs" indicator. A lead whose time has already passed is due
+    // instead (comes from /api/leads/due, not this).
+    function getUpcomingCallbacks(leads) {
+      const now = new Date();
+      const upcoming = [];
+
+      leads.forEach((lead) => {
+        if (!lead.CallBackOn) return;
+
+        const callBackDate = new Date(lead.CallBackOn);
+        if (isNaN(callBackDate)) return;
+        if (callBackDate <= now) return; // not upcoming - already due
+
+        upcoming.push({ name: lead.Name, phone: lead.Phone, temperatureValue: lead.TemperatureValue, callBackDate });
+      });
+
+      upcoming.sort((a, b) => a.callBackDate - b.callBackDate);
+      return upcoming;
+    }
+
+    // A short, friendly time for an upcoming call-back's reason line, e.g.
+    // "Scheduled for 7/12, 2:30 PM".
+    function formatScheduledTime(date) {
+      return date.toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" });
+    }
+
+    // Builds one call-back's row: name/phone/temperature/reason/stage/notes
+    // on the left, its own Call/Hang Up controls on the right. Clicking
+    // anywhere else on the row opens the full detail panel - same rich
+    // information (AI notes, history, stage, call-back, human notes) as the
+    // main leads page, not a stripped-down summary. `entry.highlighted`
+    // decides whether this row gets the amber "needs attention soon" look
+    // or stays calm/neutral.
+    function createCallbackItem(entry) {
+      const item = document.createElement("div");
+      item.className = "callback-item" + (entry.highlighted ? " highlighted" : "");
+
+      const info = document.createElement("div");
+      info.className = "callback-item-info";
+
+      const nameLine = document.createElement("div");
+      const nameStrong = document.createElement("strong");
+      nameStrong.textContent = entry.name || "(no name)";
+      nameLine.appendChild(nameStrong);
+      nameLine.appendChild(document.createTextNode(" · " + entry.phone));
+      info.appendChild(nameLine);
+
+      info.appendChild(renderTemperatureBadge(entry));
+
+      const reason = document.createElement("p");
+      reason.className = "callback-reason";
+      reason.textContent = entry.reason;
+      info.appendChild(reason);
+
+      // Same Stage/Notes preview the main leads table shows, so this isn't
+      // a stripped-down view - full detail is one click away in the panel.
+      const fullLead = findFullLeadByPhone(entry.phone);
+      if (fullLead) {
+        const details = document.createElement("p");
+        details.className = "callback-item-details";
+        const stageText = fullLead.Status ? `Stage: ${fullLead.Status}` : "Stage: (none)";
+        const notesText = fullLead.Notes ? `Notes: ${fullLead.Notes}` : "Notes: (none)";
+        details.textContent = `${stageText} · ${notesText}`;
+        info.appendChild(details);
+      }
+
+      item.appendChild(info);
+
+      const callButton = document.createElement("button");
+      callButton.className = "call-button";
+      callButton.textContent = "Call";
+
+      const hangupButton = document.createElement("button");
+      hangupButton.className = "hangup-button";
+      hangupButton.textContent = "Hang Up";
+      hangupButton.style.display = "none";
+
+      const callStatus = document.createElement("span");
+      callStatus.className = "call-status";
+
+      attachCallHandlers(entry.phone, callButton, hangupButton, callStatus);
+
+      const callArea = document.createElement("div");
+      callArea.appendChild(callButton);
+      callArea.appendChild(hangupButton);
+      callArea.appendChild(callStatus);
+      item.appendChild(callArea);
+
+      // Clicking anywhere else on the item opens the full detail panel
+      // (attachCallHandlers already stopPropagation()s the Call/Hang Up
+      // buttons, so clicking those doesn't also trigger this).
+      item.addEventListener("click", () => openLeadPanel(entry.phone));
+
+      return item;
+    }
+
+    // Fetches the full leads list - needed for the call-back spacing check,
+    // showing Stage/Notes in each item's summary, and computing the
+    // upcoming (future) call-backs.
+    async function loadAllLeads() {
+      try {
+        const response = await fetch("/api/leads");
+        if (response.ok) allLeads = await response.json();
+      } catch (error) {
+        // Not critical - the list and panel still work without it, just
+        // without the Stage/Notes preview line, upcoming entries, and
+        // spacing suggestions.
+      }
+    }
+
+    // Fetches the due list, combines it with the upcoming list (computed
+    // from allLeads), and renders ONE chronological list: due leads first
+    // (already sorted most-overdue-first by the backend), then upcoming
+    // leads (soonest-first) - reading top to bottom as "most urgent first,
+    // then what's coming up next." This is this page's whole purpose.
+    async function loadCallbacksList() {
+      try {
+        const response = await fetch("/api/leads/due");
+        if (!response.ok) throw new Error("Server responded with an error");
+
+        const dueLeads = await response.json();
+        const upcoming = getUpcomingCallbacks(allLeads);
+
+        // Normalize both into the same shape, so createCallbackItem doesn't
+        // need to know or care which list an entry came from.
+        const dueEntries = dueLeads.map((lead) => ({
+          name: lead.name,
+          phone: lead.phone,
+          temperatureValue: lead.temperatureValue,
+          reason: lead.reason,
+          highlighted: true, // due leads are always highlighted
+        }));
+
+        const upcomingEntries = upcoming.map((item) => ({
+          name: item.name,
+          phone: item.phone,
+          temperatureValue: item.temperatureValue,
+          reason: `Scheduled for ${formatScheduledTime(item.callBackDate)}`,
+          // Upcoming ones only get highlighted once they're within the
+          // reminder window (1 hour) - further-out ones stay calm.
+          highlighted: item.callBackDate - new Date() <= REMINDER_WINDOW_MS,
+        }));
+
+        const allEntries = dueEntries.concat(upcomingEntries);
+
+        if (allEntries.length === 0) {
+          callbacksContainer.textContent = "No call-backs due or scheduled right now.";
+          return;
+        }
+
+        const list = document.createElement("div");
+        list.className = "callback-list";
+        allEntries.forEach((entry) => list.appendChild(createCallbackItem(entry)));
+
+        callbacksContainer.replaceWith(list);
+      } catch (error) {
+        callbacksContainer.textContent = "Couldn't load call-backs right now. Please check the server and try again.";
+      }
+    }
+
+    // Only load anything if someone's actually signed in - otherwise the
+    // sign-in overlay is already showing (see checkSignedIn).
+    (async () => {
+      const signedIn = await checkSignedIn();
+      if (!signedIn) return;
+
+      // Load the full lead list FIRST (so Stage/Notes previews, upcoming
+      // entries, and the spacing check all have data ready), then render
+      // the combined list.
+      await loadAllLeads();
+      await loadCallbacksList();
+      setupCallingDevice();
+    })();
+  </script>
+</body>
+</html>

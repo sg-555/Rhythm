@@ -1,0 +1,11 @@
+node_modules
+.env
+google-key.json
+backend/last-transcript.json
+backend/call-history.json
+backend/call-log.json
+backend/users.json
+ngrok
+ngrok-v3-stable-darwin-arm64.zip
+.DS_Store
+.claude/settings.local.json
