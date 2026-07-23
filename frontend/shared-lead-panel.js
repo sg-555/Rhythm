@@ -292,6 +292,14 @@ function updateWorkspaceLayout() {
       activeCallPhone = phone;
       isInCall = true;
       updateWorkspaceLayout(); // opens the right-hand call panels
+      // If a call is started from INSIDE the lead detail panel (or the
+      // profile panel happens to be open), either one would otherwise sit
+      // on top of (and hide) the Live Transcript/AI Coach columns this just
+      // opened - close both so the split layout is fully visible. Neither
+      // reopens when the call ends - see endActiveCall() below, which
+      // deliberately does NOT call either of these.
+      closeLeadPanel();
+      if (typeof closeProfilePanel === "function") closeProfilePanel();
       resetTranscriptPanel();
       resetCoachingPanel();
       refreshAllCallButtons("Connecting...");
@@ -363,6 +371,11 @@ function updateWorkspaceLayout() {
         activeCallPhone = phone;
         isInCall = true;
         updateWorkspaceLayout(); // opens the right-hand call panels
+        // Same reason as startDemoCall() above - don't let the lead panel
+        // (or the profile panel, if that's what's open) sit on top of the
+        // Live Transcript/AI Coach columns this just opened.
+        closeLeadPanel();
+        if (typeof closeProfilePanel === "function") closeProfilePanel();
         refreshAllCallButtons("Connecting...");
         startTranscriptFeed();
 
