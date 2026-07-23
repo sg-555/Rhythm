@@ -24,14 +24,17 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_REDIRECT_URI
 );
 
-// The narrowest scopes that still let us (in a LATER step) create a Google
-// Sheet for each user and read/write it:
+// The narrowest scopes that still let us create a Google Sheet for each
+// user and read/write it:
 // - userinfo.email / userinfo.profile: just enough to know who signed in
 //   (their email + name) - not their whole Google identity.
 // - drive.file: only gives access to files THIS APP creates or opens, not
-//   the user's entire Drive. That's both safer for the user, and easier to
-//   get verified by Google later than the broader "drive"/"spreadsheets"
-//   scopes would be.
+//   the user's entire Drive - covers "Create my Rhythm sheet" fully. The
+//   broader "spreadsheets"/"drive" scopes would ALSO let us read/write an
+//   existing sheet the user just pastes a URL/ID for, but those are
+//   Google-restricted scopes (a scarier consent screen, and required
+//   verification for public use) - not worth it for a feature that isn't
+//   built yet. See the onboarding screen's "coming soon" note.
 const GOOGLE_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
   "https://www.googleapis.com/auth/userinfo.profile",
@@ -94,6 +97,15 @@ function saveUser(email, tokens, profile) {
     // The rep's own company/organisation, set via POST /api/profile - never
     // touched here, so re-signing in doesn't erase it.
     company: existing.company || "",
+    // This user's OWN Google Sheet ID (see server.js's onboarding
+    // endpoints) - null until they create or connect one. Never touched
+    // here either, so re-signing in never loses it.
+    sheetId: existing.sheetId || null,
+    // True once the Phone column has been set to plain-text format (so a
+    // leading "+" is never misread as a formula) - see
+    // applyPhoneColumnPlainTextFormat() in server.js. Lets that fix-up run
+    // at most once per user instead of on every request.
+    phoneColumnFormatted: existing.phoneColumnFormatted || false,
     accessToken: tokens.access_token,
     // Google only sends a refresh_token the FIRST time you consent (or
     // whenever we force prompt=consent, like we do above) - if THIS sign-in
@@ -123,6 +135,83 @@ function updateUserCompany(email, company) {
   users[email].company = company;
   fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
   return users[email];
+}
+
+// Saves which Google Sheet this user's Rhythm data lives in - set once,
+// either by creating a brand-new sheet or connecting an existing one (see
+// the /api/onboarding/* routes in server.js). Returns the updated user, or
+// null if we've never seen this email before.
+function updateUserSheetId(email, sheetId) {
+  const users = loadUsers();
+  if (!users[email]) return null;
+
+  users[email].sheetId = sheetId;
+  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  return users[email];
+}
+
+// Marks the Phone-column plain-text fix-up as done for one user, so it
+// never runs again for them - see applyPhoneColumnPlainTextFormat() and
+// getSheetsContextForUser() in server.js.
+function updateUserPhoneColumnFormatted(email) {
+  const users = loadUsers();
+  if (!users[email]) return null;
+
+  users[email].phoneColumnFormatted = true;
+  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  return users[email];
+}
+
+// Persists a freshly-refreshed access token (and its new expiry) for one
+// user. Called automatically whenever getUserOAuthClient()'s client
+// refreshes itself behind the scenes - see below - so the NEXT request
+// doesn't have to refresh again right away. Silently does nothing if the
+// user has since been removed (e.g. users.json was hand-edited) - losing
+// one refreshed token is harmless, since the next request just refreshes again.
+function updateUserTokens(email, accessToken, expiryDate) {
+  const users = loadUsers();
+  if (!users[email]) return;
+
+  users[email].accessToken = accessToken;
+  users[email].tokenExpiryDate = expiryDate || null;
+  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+}
+
+// Builds a Google API client authenticated as ONE specific user, using
+// THEIR OWN stored OAuth tokens - never the service account. This is what
+// makes per-user sheets possible: every Sheets API call made with this
+// client only ever touches files that user themselves has authorised
+// (their own "Rhythm Leads" sheet, or one they've explicitly connected).
+//
+// If the access token has expired, the underlying google-auth-library
+// client automatically uses the refresh token to get a new one the next
+// time it's used - we just listen for that ("tokens" event) and persist the
+// new access token back to users.json via updateUserTokens above, so it's
+// ready to reuse next time without refreshing again. If the refresh token
+// itself has been revoked (e.g. the user removed Rhythm's access in their
+// Google Account settings), that first real API call will fail with an
+// auth error - server.js's handleSheetsError() turns that into a "please
+// sign in again" response rather than a silent/generic failure.
+function getUserOAuthClient(user) {
+  const client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+
+  client.setCredentials({
+    access_token: user.accessToken,
+    refresh_token: user.refreshToken,
+    expiry_date: user.tokenExpiryDate,
+  });
+
+  client.on("tokens", (tokens) => {
+    if (tokens.access_token) {
+      updateUserTokens(user.email, tokens.access_token, tokens.expiry_date);
+    }
+  });
+
+  return client;
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────
@@ -199,6 +288,10 @@ module.exports = {
   saveUser,
   getUser,
   updateUserCompany,
+  updateUserSheetId,
+  updateUserPhoneColumnFormatted,
+  updateUserTokens,
+  getUserOAuthClient,
   createSession,
   destroySession,
   readSessionIdFromRequest,

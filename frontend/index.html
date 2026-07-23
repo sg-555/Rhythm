@@ -411,6 +411,50 @@
       text-decoration: underline;
     }
 
+    /* ── Onboarding screen ────────────────────────────────────────────────
+       Shown INSTEAD of the leads table for a real signed-in user who hasn't
+       created their own Rhythm sheet yet - see checkSignedIn(). Reuses
+       .sign-in-overlay's full-page-overlay mechanics. Just ONE option for
+       now (creating a new sheet) - connecting an existing one needs a
+       Google Picker integration this app doesn't have yet, see the
+       "coming soon" note below the card. */
+    .onboarding-card {
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: var(--sp-6);
+      max-width: 440px;
+      width: 90vw;
+      text-align: center;
+    }
+
+    .onboarding-card h1 {
+      margin-bottom: var(--sp-2);
+    }
+
+    .onboarding-subhead {
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+      line-height: 1.5;
+      margin: 0 0 var(--sp-6) 0;
+    }
+
+    .onboarding-card .call-button {
+      width: 100%;
+    }
+
+    .onboarding-coming-soon {
+      margin: var(--sp-4) 0 0 0;
+      color: var(--ink-faint);
+      font-size: var(--text-meta);
+    }
+
+    /* The success screen's secondary "move on" action, sitting right below
+       the primary "Open my sheet" link/button. */
+    .onboarding-continue-button {
+      margin-top: var(--sp-3);
+    }
+
     /* Always-visible strip while in DEMO MODE - see checkSignedIn(). Sits
        above the top bar so it's the first thing a demo visitor notices. */
     .demo-banner {
@@ -640,6 +684,87 @@
       padding: var(--sp-5);
       color: var(--ink-muted);
       font-size: var(--text-body);
+    }
+
+    /* "Open my sheet" - shown wherever a link to the user's own Google Sheet
+       is useful (empty state, profile panel, right after creating it).
+       Interactive blue, same treatment as "Sign in with Google" - not sage
+       green, since this isn't one of the app's Call/Save/Send/Accept
+       actions, just a navigation shortcut. Opens in a new tab. */
+    .sheet-link-button {
+      display: inline-block;
+      margin-bottom: var(--sp-3);
+      background: var(--interactive);
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: var(--sp-2) var(--sp-4);
+      border-radius: var(--radius-sm);
+      transition: background var(--transition);
+    }
+
+    .sheet-link-button:hover {
+      background: var(--interactive-hover);
+    }
+
+    /* ── Empty leads state ──────────────────────────────────────────────
+       Shown instead of the bare table when a signed-in user's sheet has no
+       leads yet - guides them to add rows directly in the sheet, rather
+       than leaving them looking at an empty table with no next step. */
+    .empty-leads-panel {
+      padding: var(--sp-5);
+      max-width: 56ch;
+    }
+
+    .empty-leads-panel p {
+      margin: 0 0 var(--sp-3) 0;
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+      line-height: 1.6;
+    }
+
+    .empty-leads-panel strong {
+      color: var(--ink);
+    }
+
+    /* A tiny mock-up of one sheet row, so "Name" and "Phone" columns are
+       shown, not just described. */
+    .empty-leads-example {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-bottom: var(--sp-4);
+      font-size: var(--text-meta);
+    }
+
+    .empty-leads-example-cell {
+      padding: var(--sp-2) var(--sp-3);
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .empty-leads-example-cell:nth-child(2n) {
+      border-right: none;
+    }
+
+    .empty-leads-example-cell:nth-last-child(-n+2) {
+      border-bottom: none;
+    }
+
+    /* Header cells of the example (Name / Phone) */
+    .empty-leads-example-cell.header {
+      background: var(--bg-subtle);
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .empty-leads-panel p.empty-leads-footnote {
+      margin-top: var(--sp-4);
+      color: var(--ink-faint);
+      font-size: var(--text-micro);
     }
 
     /* ── Pagination ──────────────────────────────────────────────────── */
@@ -1185,6 +1310,24 @@
     </div>
   </div>
 
+  <!-- Shown INSTEAD of the leads table for a real signed-in user who hasn't
+       created/connected their own Rhythm sheet yet - see checkSignedIn().
+       Never shown in demo mode (demo always has DEMO_SHEET_ID already). -->
+  <div id="onboardingOverlay" class="sign-in-overlay">
+    <!-- Filled in by createSheetButton's click handler once the sheet is
+         created - see renderOnboardingSuccess() - so this markup is just
+         the starting state. -->
+    <div class="onboarding-card" id="onboardingCardContent">
+      <h1>Connect your Rhythm sheet</h1>
+      <p class="onboarding-subhead">Every Rhythm account keeps its leads in its own Google Sheet. We'll create a new one in your own Drive, named "Rhythm Leads", already set up with the right columns.</p>
+
+      <button id="createSheetButton" class="call-button" type="button">Create my Rhythm sheet</button>
+      <span id="createSheetStatus" class="call-status"></span>
+
+      <p class="onboarding-coming-soon">Connecting a sheet you already have is coming soon.</p>
+    </div>
+  </div>
+
   <!-- Always-visible while in demo mode - see checkSignedIn(). -->
   <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
@@ -1346,6 +1489,7 @@
     // at the top, before loading any real data: ask the backend who (if
     // anyone) is signed in, and show the sign-in overlay instead if nobody is.
     const signInOverlay = document.getElementById("signInOverlay");
+    const onboardingOverlay = document.getElementById("onboardingOverlay");
     const userBarName = document.getElementById("userBarName");
     const signOutButton = document.getElementById("signOutButton");
     const demoBanner = document.getElementById("demoBanner");
@@ -1356,10 +1500,29 @@
     // attempted from a demo session - see startDemoCall() further down.
     let demoMode = false;
 
-    // Returns true if someone is signed in OR this is a demo session (and
-    // updates the page to match either case), or false if neither (and
-    // shows the sign-in overlay). Callers use this to decide whether it's
-    // safe to go on and load leads/set up calling/etc.
+    // A real signed-in user's own email - needed so a REAL call can tell
+    // /voice (and, through it, /call-status) which user's sheet to update,
+    // since Twilio calls those with no browser session at all. See
+    // attachCallHandlers() below. Stays null in demo mode.
+    let currentUserEmail = null;
+
+    // This user's own Google Sheet ID, once they've created one - lets us
+    // build the "Open my sheet" link (see sheetUrlFor() below) wherever it's
+    // shown: the empty state, the profile panel, and right after creating
+    // the sheet. Stays null in demo mode and before onboarding.
+    let currentUserSheetId = null;
+
+    // The one place we build a link to a Google Sheet from its ID.
+    function sheetUrlFor(sheetId) {
+      return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    }
+
+    // Checks who's signed in and updates the page to match. Returns one of:
+    // "ready"       - safe to load leads / set up calling (demo, or a real
+    //                 user who already has a sheet connected)
+    // "onboarding"  - a real signed-in user with NO sheet yet - show the
+    //                 onboarding screen instead of the leads table
+    // "signedOut"   - show the sign-in overlay; nothing to load
     async function checkSignedIn() {
       try {
         const response = await fetch("/api/me");
@@ -1375,24 +1538,34 @@
           // openProfilePanel() below.
           userBarName.classList.add("clickable");
           signOutButton.textContent = "Sign out";
-          return true;
+          currentUserEmail = data.user.email;
+          currentUserSheetId = data.user.sheetId;
+
+          if (!data.user.hasSheet) {
+            onboardingOverlay.style.display = "flex";
+            return "onboarding";
+          }
+          onboardingOverlay.style.display = "none";
+          return "ready";
         }
+
+        onboardingOverlay.style.display = "none";
 
         if (demoMode) {
           signInOverlay.style.display = "none";
           userBarName.textContent = "Demo visitor";
           userBarName.classList.remove("clickable");
           signOutButton.textContent = "Exit demo";
-          return true;
+          return "ready";
         }
 
         signInOverlay.style.display = "flex";
-        return false;
+        return "signedOut";
       } catch (error) {
         // Can't even check right now - fail safe by showing the sign-in
         // screen rather than a half-working app.
         signInOverlay.style.display = "flex";
-        return false;
+        return "signedOut";
       }
     }
 
@@ -1461,6 +1634,17 @@
       header.appendChild(email);
 
       profilePanelContent.appendChild(header);
+
+      // Permanent access to their sheet, wherever they are in the app.
+      if (profile.sheetId) {
+        const openSheetLink = document.createElement("a");
+        openSheetLink.href = sheetUrlFor(profile.sheetId);
+        openSheetLink.target = "_blank";
+        openSheetLink.rel = "noopener";
+        openSheetLink.className = "sheet-link-button";
+        openSheetLink.textContent = "Open my sheet";
+        profilePanelContent.appendChild(openSheetLink);
+      }
 
       // Company - the one editable field
       const companyContainer = document.createElement("div");
@@ -1933,7 +2117,11 @@
         try {
           // Start a real WebRTC call. The "To" param is read by our backend's
           // POST /voice endpoint, which tells Twilio which number to dial.
-          activeCall = await device.connect({ params: { To: phone } });
+          // "callerEmail" rides along the same way - /voice forwards it into
+          // /call-status's callback URL, since Twilio calls that with no
+          // browser session at all, so it needs another way to know WHICH
+          // signed-in user's sheet this call belongs to.
+          activeCall = await device.connect({ params: { To: phone, callerEmail: currentUserEmail || "" } });
 
           activeCall.on("accept", () => refreshAllCallButtons("In Call"));
           activeCall.on("disconnect", () => endActiveCall("Call ended"));
@@ -2066,7 +2254,8 @@
     }
 
     // Shows a plain text message inside #leadsTableScroll instead of a table
-    // (used for empty/error/no-filter-match states).
+    // (used for error/no-filter-match states - see renderEmptyLeadsState()
+    // below for the richer "no leads at all yet" case specifically).
     function renderMessage(text) {
       leadsLastFilteredList = [];
       updateLeadsPaginationBar(0);
@@ -2077,6 +2266,66 @@
       message.className = "message";
       message.textContent = text;
       leadsContainer.appendChild(message);
+    }
+
+    // Shown instead of the bare table when there are NO leads in the sheet
+    // yet at all (as opposed to "no leads match this filter", which stays a
+    // plain renderMessage()) - explains exactly what to do next, instead of
+    // leaving a first-time user staring at an empty table.
+    function renderEmptyLeadsState() {
+      leadsLastFilteredList = [];
+      updateLeadsPaginationBar(0);
+      leadsContainer.innerHTML = "";
+
+      const panel = document.createElement("div");
+      panel.className = "empty-leads-panel";
+
+      const intro = document.createElement("p");
+      intro.innerHTML = "<strong>Add your leads to get started</strong> - you only need two columns: Name and Phone.";
+      panel.appendChild(intro);
+
+      const explain = document.createElement("p");
+      explain.textContent =
+        "Rhythm.ai fills in everything else automatically as you make calls - stage, outcomes, attempts, call history, AI notes, and temperature.";
+      panel.appendChild(explain);
+
+      // A tiny example row, so the expected phone format is SHOWN, not just
+      // described - this is the most likely first-run mistake. Deliberately
+      // NO leading "+" here: Google Sheets reads a cell starting with "+" as
+      // an attempted formula, which is exactly the error this is meant to
+      // prevent - and our own phone matching strips it either way (see
+      // normalizePhoneNumber() in server.js), so it was never needed.
+      const example = document.createElement("div");
+      example.className = "empty-leads-example";
+      example.innerHTML = `
+        <div class="empty-leads-example-cell header">Name</div>
+        <div class="empty-leads-example-cell header">Phone</div>
+        <div class="empty-leads-example-cell">Aarav Sharma</div>
+        <div class="empty-leads-example-cell">91 98765 43210</div>
+      `;
+      panel.appendChild(example);
+
+      const formatNote = document.createElement("p");
+      formatNote.innerHTML =
+        "Always include the country code (e.g. <strong>91</strong> for India, <strong>1</strong> for the US) - without it, calls can't be placed. Don't type a leading <strong>+</strong> - Google Sheets reads it as a formula.";
+      panel.appendChild(formatNote);
+
+      if (currentUserSheetId) {
+        const openSheetLink = document.createElement("a");
+        openSheetLink.href = sheetUrlFor(currentUserSheetId);
+        openSheetLink.target = "_blank";
+        openSheetLink.rel = "noopener";
+        openSheetLink.className = "sheet-link-button";
+        openSheetLink.textContent = "Open my sheet";
+        panel.appendChild(openSheetLink);
+      }
+
+      const footnote = document.createElement("p");
+      footnote.className = "empty-leads-footnote";
+      footnote.textContent = "New leads appear here automatically - Rhythm checks every 30 seconds, so there's no need to reload.";
+      panel.appendChild(footnote);
+
+      leadsContainer.appendChild(panel);
     }
 
     // Rows-per-page changes always jump back to page 1 - otherwise a rep on
@@ -2745,12 +2994,23 @@
     async function loadLeads() {
       try {
         const response = await fetch("/api/leads");
+        const data = await response.json().catch(() => null);
+
+        // The backend's Google connection for this account has expired or
+        // been revoked (see handleSheetsError() in server.js) - re-signing
+        // in gets a fresh token, so send them straight there rather than
+        // showing a generic, unhelpful error.
+        if (response.status === 401 && data && data.reauthRequired) {
+          renderMessage("Your Google connection needs to be refreshed - redirecting to sign in...");
+          location.href = "/auth/google";
+          return;
+        }
 
         if (!response.ok) {
           throw new Error("Server responded with an error");
         }
 
-        allLeads = await response.json();
+        allLeads = data;
 
         // Always check for call-back reminders and refresh the always-
         // visible "Call-backs" indicator, even on refreshes where we skip
@@ -2768,7 +3028,7 @@
         if (activeCall) return;
 
         if (allLeads.length === 0) {
-          renderMessage("No leads yet. Add some rows to your Google Sheet and refresh this page.");
+          renderEmptyLeadsState();
         } else {
           applyTemperatureFilter(); // shows whatever the filter is currently set to
         }
@@ -3092,12 +3352,70 @@
       });
     }
 
-    // Only load leads / set up calling if someone's actually signed in -
-    // otherwise the sign-in overlay is already showing (see checkSignedIn),
-    // and there's nothing for a signed-out visitor to load yet.
+    // ── Onboarding: creating a Rhythm sheet ──────────────────────────────
+    // Shown instead of the leads table for a real signed-in user with no
+    // sheetId yet - see checkSignedIn().
+    const createSheetButton = document.getElementById("createSheetButton");
+    const createSheetStatus = document.getElementById("createSheetStatus");
+    const onboardingCardContent = document.getElementById("onboardingCardContent");
+
+    // Swaps the onboarding card's content for a short success screen with
+    // the "Open my sheet" link front and center - the rep's first real
+    // chance to see and open the sheet they just got. "Continue to my
+    // leads" is what actually moves on (reloads, so checkSignedIn() re-runs
+    // and now finds hasSheet=true).
+    function renderOnboardingSuccess(sheetId) {
+      onboardingCardContent.innerHTML = "";
+
+      const heading = document.createElement("h1");
+      heading.textContent = "Your Rhythm sheet is ready";
+      onboardingCardContent.appendChild(heading);
+
+      const subhead = document.createElement("p");
+      subhead.className = "onboarding-subhead";
+      subhead.textContent = 'It\'s in your Google Drive, named "Rhythm Leads" - add leads there any time.';
+      onboardingCardContent.appendChild(subhead);
+
+      const openLink = document.createElement("a");
+      openLink.href = sheetUrlFor(sheetId);
+      openLink.target = "_blank";
+      openLink.rel = "noopener";
+      openLink.className = "sheet-link-button";
+      openLink.textContent = "Open my sheet";
+      onboardingCardContent.appendChild(openLink);
+
+      onboardingCardContent.appendChild(document.createElement("br"));
+
+      const continueButton = document.createElement("button");
+      continueButton.className = "btn-secondary onboarding-continue-button";
+      continueButton.type = "button";
+      continueButton.textContent = "Continue to my leads";
+      continueButton.addEventListener("click", () => location.reload());
+      onboardingCardContent.appendChild(continueButton);
+    }
+
+    createSheetButton.addEventListener("click", async () => {
+      createSheetButton.disabled = true;
+      createSheetStatus.textContent = "Creating your sheet...";
+
+      try {
+        const response = await fetch("/api/onboarding/create-sheet", { method: "POST" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not create a sheet.");
+
+        renderOnboardingSuccess(data.sheetId);
+      } catch (error) {
+        createSheetButton.disabled = false;
+        createSheetStatus.textContent = "Error: " + error.message;
+      }
+    });
+
+    // Only load leads / set up calling once someone's actually signed in AND
+    // has a sheet connected - otherwise the sign-in or onboarding overlay is
+    // already showing (see checkSignedIn), and there's nothing to load yet.
     (async () => {
-      const signedIn = await checkSignedIn();
-      if (!signedIn) return;
+      const signInStatus = await checkSignedIn();
+      if (signInStatus !== "ready") return;
 
       loadLeads();
       // Never set up real Twilio calling in demo mode - no token is even

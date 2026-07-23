@@ -27,7 +27,7 @@ Rhythm strips away the grind around the call so the rep can focus on the one thi
 - **Telephony:** Twilio (Voice SDK for browser calling, SMS API for follow-ups)
 - **Transcription:** Deepgram (live, speaker-diarized streaming transcription)
 - **AI:** Google Gemini, for call analysis, coaching, and SMS drafting
-- **Data store:** Google Sheets (via a service account), used as the lead/CRM database
+- **Data store:** Google Sheets, used as the lead/CRM database — each signed-in user creates or connects their own sheet (read/written with their own OAuth tokens, never a shared service account); a service account is only used to serve the seeded demo sheet in Demo Mode
 - **Auth:** Google OAuth 2.0
 
 A design highlight: telephony, SMS, AI, and the CRM data layer are all built behind small swappable provider abstractions rather than called directly. Swapping Gemini for another model, or Twilio for another telephony provider, or the Sheet-backed store for a real database, means writing a new provider module — the rest of the app doesn't change.
@@ -46,7 +46,7 @@ Actively in development. This is a personal project, built solo to sharpen a rea
 
 ## Setup
 
-**Requirements:** Node.js, a Twilio account, a Deepgram account, a Google Gemini API key, a Google Cloud project (OAuth + a service account with Sheets access), and a Google Sheet to use as the lead database.
+**Requirements:** Node.js, a Twilio account, a Deepgram account, a Google Gemini API key, and a Google Cloud project (OAuth credentials, plus a service account for Demo Mode's seeded sheet). You don't need to prepare a lead sheet yourself — the first time you sign in, Rhythm walks you through creating one (in your own Drive) or connecting one you already have.
 
 ```bash
 git clone <this-repo>
@@ -69,10 +69,9 @@ GEMINI_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
-DEFAULT_SHEET_ID=
 ```
 
-You'll also need a Google service account key saved as `google-key.json` in the project root, with access to the Google Sheet you're using as the data store.
+You'll also need a Google service account key saved as `google-key.json` in the project root - this is only used to serve Demo Mode's seeded sheet, not any real user's data.
 
 Then run the server:
 

@@ -354,6 +354,26 @@
       margin-bottom: var(--sp-3);
     }
 
+    /* "Open my sheet" - see index.html's copy of this for the full
+       explanation. Interactive blue, not sage green - a navigation
+       shortcut, not one of the app's Call/Save/Send/Accept actions. */
+    .sheet-link-button {
+      display: inline-block;
+      margin-bottom: var(--sp-3);
+      background: var(--interactive);
+      color: #ffffff;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.85rem;
+      padding: var(--sp-2) var(--sp-4);
+      border-radius: var(--radius-sm);
+      transition: background var(--transition);
+    }
+
+    .sheet-link-button:hover {
+      background: var(--interactive-hover);
+    }
+
     .company-row {
       display: flex;
       gap: var(--sp-2);
@@ -639,6 +659,17 @@
     </div>
   </div>
 
+  <!-- Shown instead of this page's content for a real signed-in user who
+       hasn't set up their Rhythm sheet yet - see checkSignedIn(). The full
+       "create/connect a sheet" screen lives on the Leads page only. -->
+  <div id="onboardingOverlay" class="sign-in-overlay">
+    <div class="sign-in-card">
+      <h1 class="signin-headline">Connect your Rhythm sheet first</h1>
+      <p class="signin-subhead">Head to the Leads page to create or connect your Google Sheet - then come back here.</p>
+      <a href="index.html" class="google-signin-button">Go to Leads</a>
+    </div>
+  </div>
+
   <!-- Always-visible while in demo mode - see checkSignedIn(). -->
   <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
@@ -758,11 +789,20 @@
     // Same pattern on every page - see index.html's copy of this for the
     // full explanation.
     const signInOverlay = document.getElementById("signInOverlay");
+    const onboardingOverlay = document.getElementById("onboardingOverlay");
     const userBarName = document.getElementById("userBarName");
     const signOutButton = document.getElementById("signOutButton");
     const demoBanner = document.getElementById("demoBanner");
     let demoMode = false;
 
+    // The one place we build a link to a Google Sheet from its ID - see
+    // index.html's copy of this for the full explanation.
+    function sheetUrlFor(sheetId) {
+      return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    }
+
+    // Returns "ready" / "onboarding" / "signedOut" - see index.html's copy
+    // of this for the full explanation.
     async function checkSignedIn() {
       try {
         const response = await fetch("/api/me");
@@ -776,22 +816,30 @@
           userBarName.textContent = data.user.name || data.user.email;
           userBarName.classList.add("clickable");
           signOutButton.textContent = "Sign out";
-          return true;
+
+          if (!data.user.hasSheet) {
+            onboardingOverlay.style.display = "flex";
+            return "onboarding";
+          }
+          onboardingOverlay.style.display = "none";
+          return "ready";
         }
+
+        onboardingOverlay.style.display = "none";
 
         if (demoMode) {
           signInOverlay.style.display = "none";
           userBarName.textContent = "Demo visitor";
           userBarName.classList.remove("clickable");
           signOutButton.textContent = "Exit demo";
-          return true;
+          return "ready";
         }
 
         signInOverlay.style.display = "flex";
-        return false;
+        return "signedOut";
       } catch (error) {
         signInOverlay.style.display = "flex";
-        return false;
+        return "signedOut";
       }
     }
 
@@ -869,6 +917,17 @@
       header.appendChild(email);
 
       profilePanelContent.appendChild(header);
+
+      // Permanent access to their sheet, wherever they are in the app.
+      if (profile.sheetId) {
+        const openSheetLink = document.createElement("a");
+        openSheetLink.href = sheetUrlFor(profile.sheetId);
+        openSheetLink.target = "_blank";
+        openSheetLink.rel = "noopener";
+        openSheetLink.className = "sheet-link-button";
+        openSheetLink.textContent = "Open my sheet";
+        profilePanelContent.appendChild(openSheetLink);
+      }
 
       const companyContainer = document.createElement("div");
       const companyRow = document.createElement("div");
@@ -1184,9 +1243,18 @@
     async function loadAnalytics() {
       try {
         const response = await fetch(buildAnalyticsUrl());
+        const data = await response.json().catch(() => null);
+
+        // Same re-auth redirect as index.html's loadLeads() - see there for
+        // the full explanation.
+        if (response.status === 401 && data && data.reauthRequired) {
+          showChartsEmptyState("Your Google connection needs to be refreshed - redirecting to sign in...");
+          location.href = "/auth/google";
+          return;
+        }
+
         if (!response.ok) throw new Error("Server responded with an error");
 
-        const data = await response.json();
         renderMetrics(data);
 
         if (data.totalCalls === 0) {
@@ -1213,11 +1281,12 @@
     hourFromInput.addEventListener("change", loadAnalytics);
     hourToInput.addEventListener("change", loadAnalytics);
 
-    // Only load analytics if someone's actually signed in - otherwise the
-    // sign-in overlay is already showing (see checkSignedIn).
+    // Only load analytics once someone's actually signed in AND has a sheet
+    // connected - otherwise the sign-in or onboarding overlay is already
+    // showing (see checkSignedIn).
     (async () => {
-      const signedIn = await checkSignedIn();
-      if (signedIn) loadAnalytics();
+      const signInStatus = await checkSignedIn();
+      if (signInStatus === "ready") loadAnalytics();
     })();
   </script>
 </body>

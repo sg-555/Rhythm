@@ -37,8 +37,12 @@ const {
   getGoogleAuthUrl,
   exchangeCodeForUser,
   saveUser,
+  getUser,
   getCurrentUser,
   updateUserCompany,
+  updateUserSheetId,
+  updateUserPhoneColumnFormatted,
+  getUserOAuthClient,
   createSession,
   destroySession,
   readSessionIdFromRequest,
@@ -115,7 +119,13 @@ app.get("/auth/google/callback", async (req, res) => {
 app.get("/api/me", (req, res) => {
   const user = getCurrentUser(req);
   res.json({
-    user: user ? { email: user.email, name: user.name } : null,
+    // hasSheet tells the frontend whether to show the leads table or the
+    // onboarding screen (see checkSignedIn() in each page) - true only once
+    // this user has created or connected their own Rhythm sheet. sheetId
+    // itself is what lets the frontend build an "Open my sheet" link - it's
+    // not sensitive (the user already owns/can open this sheet in Google
+    // Sheets directly), so there's no harm in sending it down.
+    user: user ? { email: user.email, name: user.name, hasSheet: !!user.sheetId, sheetId: user.sheetId || null } : null,
     demo: isDemoRequest(req),
   });
 });
@@ -148,9 +158,7 @@ app.post("/auth/logout", (req, res) => {
 
 // Counts how many rows in the sheet currently have the given Stage value -
 // used for the profile menu's "Deals closed" stat (Stage === "Closed/Won").
-async function countLeadsAtStage(sheetId, stageName) {
-  const authClient = await auth.getClient();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
+async function countLeadsAtStage(sheets, sheetId, stageName) {
   const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
   const stageCol = getColumnIndex(headers, "stage");
 
@@ -172,13 +180,28 @@ app.get("/api/profile", async (req, res) => {
   try {
     // computeAnalytics() with no date/time filter = the whole call history.
     const analytics = computeAnalytics(loadCallLog());
-    const dealsClosed = await countLeadsAtStage(SHEET_CONFIG.sheetId, "Closed/Won");
+
+    // "Deals closed" needs this user's own sheet - but name/email/photo/
+    // company are still meaningful even before they've onboarded, so a
+    // missing sheet just means 0 here rather than failing the whole profile.
+    let dealsClosed = 0;
+    if (user.sheetId) {
+      try {
+        const { sheets, sheetId } = await getSheetsContextForUser(user);
+        dealsClosed = await countLeadsAtStage(sheets, sheetId, "Closed/Won");
+      } catch (error) {
+        console.error("Could not compute deals closed:", error.message);
+      }
+    }
 
     res.json({
       name: user.name,
       email: user.email,
       picture: user.picture || null,
       company: user.company || "",
+      hasSheet: !!user.sheetId,
+      // Lets the profile panel show a permanent "Open my sheet" link.
+      sheetId: user.sheetId || null,
       stats: {
         totalCalls: analytics.totalCalls,
         connectedCount: analytics.connectedCount,
@@ -210,24 +233,17 @@ app.post("/api/profile", (req, res) => {
 });
 
 // ── Google Sheet configuration ──────────────────────────────────────────
-// Everything about which sheet we use and what its columns are called lives
-// in this ONE object. Every place in this file that reads or writes the
-// sheet looks up column positions through here - nothing else in the code
-// hard-codes a column letter or header string.
-//
-// NOTE FOR LATER: this is written so it can become per-user configuration
-// (e.g. loaded from a database, one SHEET_CONFIG per account) instead of a
-// single hard-coded object - each user could then name/order their own
-// sheet's columns differently without any of the logic below needing to change.
+// Sheets are now per-user (see the "Per-user Sheets access" section below) -
+// this object only holds the SHARED SCHEMA every user's sheet follows, not
+// a sheet ID. Every place in this file that reads or writes a sheet looks
+// up column positions through here - nothing else in the code hard-codes a
+// column letter or header string.
 const SHEET_CONFIG = {
-  // Read from .env (DEFAULT_SHEET_ID) instead of hardcoded, so the actual
-  // sheet ID never has to appear in source code (useful now that this repo
-  // is public - anyone cloning it sets their own sheet ID in their own .env).
-  sheetId: process.env.DEFAULT_SHEET_ID,
-
   // Maps our internal field names (used throughout this file) to the exact
   // header text expected in row 1 of the sheet. We match by this text, not
-  // by column position, so columns can be added/reordered safely.
+  // by column position, so columns can be added/reordered safely. Also used
+  // (in order) as the header row when creating a brand-new "Rhythm Leads"
+  // sheet for a user - see createRhythmSheetForUser() below.
   columns: {
     name: "Name",
     phone: "Phone",
@@ -244,50 +260,135 @@ const SHEET_CONFIG = {
   },
 };
 
-// Picks which Google Sheet a request should read from: the seeded DEMO
-// sheet for demo-mode visitors, or the real one for everyone else. This is
-// the key safety rule for demo mode's READ side - it must never be able to
-// see (or, elsewhere in this file, write to) the real sheet. Throws if
-// demo mode is on but DEMO_SHEET_ID hasn't been set up yet, so that shows
-// up as a clear error instead of quietly reading nothing.
-function sheetIdForRequest(req) {
-  if (isDemoRequest(req)) {
-    if (!process.env.DEMO_SHEET_ID) {
-      throw new Error("Demo mode is on, but DEMO_SHEET_ID is not set in .env.");
-    }
-    // Belt-and-suspenders: if DEMO_SHEET_ID was ever accidentally set to the
-    // same sheet as the real one, refuse rather than silently exposing real
-    // data to demo visitors.
-    if (process.env.DEMO_SHEET_ID === SHEET_CONFIG.sheetId) {
-      throw new Error("DEMO_SHEET_ID must not be the same as DEFAULT_SHEET_ID.");
-    }
-    return process.env.DEMO_SHEET_ID;
-  }
-  return SHEET_CONFIG.sheetId;
-}
-
 // Path to the service account key file used to authenticate with Google
-// (local dev only - see below).
+// (local dev only - see below). ONLY ever used for DEMO MODE's seeded
+// sheet now - every signed-in user's OWN sheet is accessed with THEIR OWN
+// OAuth tokens instead (see getUserOAuthClient() in auth.js), never this.
 const KEY_FILE_PATH = path.join(__dirname, "..", "google-key.json");
 
 // In deployment there's usually no disk to put google-key.json on, so we
 // support passing the whole key as one env var (GOOGLE_KEY_JSON) instead.
 // Locally, it's simpler to just keep using the key file, so that stays the
 // fallback.
-const googleAuthOptions = {
+const serviceAccountAuthOptions = {
   scopes: ["https://www.googleapis.com/auth/spreadsheets"],
 };
 if (process.env.GOOGLE_KEY_JSON) {
-  googleAuthOptions.credentials = JSON.parse(process.env.GOOGLE_KEY_JSON);
+  serviceAccountAuthOptions.credentials = JSON.parse(process.env.GOOGLE_KEY_JSON);
 } else {
-  googleAuthOptions.keyFile = KEY_FILE_PATH;
+  serviceAccountAuthOptions.keyFile = KEY_FILE_PATH;
 }
 
-
 // GoogleAuth reads the key (from wherever we pointed it above) and handles
-// getting us an access token. We need full (read + write) access, since
-// /call-status below updates rows.
-const auth = new google.auth.GoogleAuth(googleAuthOptions);
+// getting us an access token for the DEMO sheet only.
+const serviceAccountAuth = new google.auth.GoogleAuth(serviceAccountAuthOptions);
+
+// ── Per-user Sheets access ───────────────────────────────────────────────
+// The ONE place every route/helper in this file gets its Google Sheets
+// access through - there is no other path that can fall back to a shared/
+// global sheet. Two identities are possible:
+// - Demo mode: always the seeded DEMO_SHEET_ID, via the service account.
+// - A signed-in user: THEIR OWN sheetId, via THEIR OWN stored OAuth tokens.
+// Both return the same shape: { sheets, sheetId }.
+
+// Tags an error so handleSheetsError() (below) can turn it into the right
+// HTTP response, instead of a generic 500 either way.
+function taggedError(message, code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+// Resolves { sheets, sheetId } for ONE already-looked-up signed-in user.
+// Throws a NEEDS_ONBOARDING error if they haven't created/connected a sheet
+// yet - every caller either handles that (the onboarding endpoints
+// themselves) or lets it bubble up to handleSheetsError().
+async function getSheetsContextForUser(user) {
+  if (!user.sheetId) {
+    throw taggedError("You haven't connected a Rhythm sheet yet.", "NEEDS_ONBOARDING");
+  }
+
+  const oauthClient = getUserOAuthClient(user);
+  const sheets = google.sheets({ version: "v4", auth: oauthClient });
+
+  // One-time fix-up for anyone who connected their sheet BEFORE the Phone
+  // column was set to plain text (see applyPhoneColumnPlainTextFormat) -
+  // this is the first place every signed-in request passes through once
+  // they have a sheet, so it runs automatically on their next request
+  // rather than needing its own button. Guarded so it only ever runs once
+  // per user, and never blocks the actual request if it fails.
+  if (!user.phoneColumnFormatted) {
+    try {
+      await applyPhoneColumnPlainTextFormat(sheets, user.sheetId);
+      updateUserPhoneColumnFormatted(user.email);
+      user.phoneColumnFormatted = true; // keep this in-memory copy in sync too
+    } catch (error) {
+      console.error("Could not apply plain-text Phone format for", user.email, "-", error.message);
+    }
+  }
+
+  return { sheets, sheetId: user.sheetId };
+}
+
+// Resolves { sheets, sheetId } for a normal browser request - demo mode's
+// seeded sheet, or the signed-in user's own sheet. This is what almost
+// every route below calls.
+async function getSheetsContextForRequest(req) {
+  if (isDemoRequest(req)) {
+    if (!process.env.DEMO_SHEET_ID) {
+      throw new Error("Demo mode is on, but DEMO_SHEET_ID is not set in .env.");
+    }
+    const authClient = await serviceAccountAuth.getClient();
+    return { sheets: google.sheets({ version: "v4", auth: authClient }), sheetId: process.env.DEMO_SHEET_ID };
+  }
+
+  const user = getCurrentUser(req);
+  if (!user) {
+    throw taggedError("Not signed in.", "REAUTH_REQUIRED");
+  }
+  return getSheetsContextForUser(user);
+}
+
+// Resolves { sheets, sheetId } from an EMAIL directly rather than a request -
+// needed for the Twilio call-status webhook, which Twilio calls server-to-
+// server with no browser session/cookie at all. See the /voice and
+// /call-status handlers below for how the email gets there.
+async function getSheetsContextForEmail(email) {
+  const user = getUser(email);
+  if (!user) {
+    throw taggedError(`No stored account for ${email}.`, "REAUTH_REQUIRED");
+  }
+  return getSheetsContextForUser(user);
+}
+
+// True if a Google API error looks like an auth failure (expired/revoked
+// token) rather than some other problem (e.g. a sheet genuinely missing a
+// column). Used by handleSheetsError to decide whether "sign in again" is
+// the right message.
+function isGoogleAuthError(error) {
+  const status = error.code || (error.response && error.response.status);
+  return status === 401 || /invalid_grant|invalid_token|No refresh token/i.test(error.message || "");
+}
+
+// Shared by every route that resolves a Sheets context: turns whatever went
+// wrong into the right HTTP response, instead of every route re-implementing
+// this. NEEDS_ONBOARDING and auth failures get a distinct shape the
+// frontend can detect and act on (show onboarding / prompt to sign in
+// again) rather than a generic failure message.
+function handleSheetsError(res, error) {
+  if (error.code === "NEEDS_ONBOARDING") {
+    return res.status(409).json({ error: error.message, needsOnboarding: true });
+  }
+  if (error.code === "REAUTH_REQUIRED" || isGoogleAuthError(error)) {
+    console.error("Google auth failed:", error.message);
+    return res.status(401).json({
+      error: "Your Google connection needs to be refreshed - please sign in again.",
+      reauthRequired: true,
+    });
+  }
+  console.error("Sheets operation failed:", error.message);
+  return res.status(500).json({ error: error.message || "Something went wrong." });
+}
 
 // Reads every row from the sheet, splitting the header row from the data
 // rows. We ask for a wide range (A1:Z) rather than a fixed number of columns,
@@ -334,16 +435,106 @@ function columnIndexToLetter(index) {
   return letter;
 }
 
+// Sets the Phone column's cell format to PLAIN TEXT, for the WHOLE column -
+// so typing a leading "+" (e.g. "+91 98765 43210") is never misread as a
+// formula by Google Sheets. Safe to call on a sheet that already has real
+// data: this only changes how cells are FORMATTED/how NEW input into them
+// is interpreted from now on - it never touches any existing cell's value.
+async function applyPhoneColumnPlainTextFormat(sheets, sheetId) {
+  // Need two things: which column is "Phone" (from the header row), and
+  // this spreadsheet's TAB's own internal numeric ID - the Sheets API
+  // addresses formatting requests by that, not by the spreadsheet's string
+  // ID (which is what's used everywhere else in this file).
+  const [{ headers }, metadata] = await Promise.all([
+    loadSheetRows(sheets, sheetId),
+    sheets.spreadsheets.get({ spreadsheetId: sheetId, fields: "sheets.properties" }),
+  ]);
+
+  const phoneCol = getColumnIndex(headers, "phone");
+  const tabId = metadata.data.sheets[0].properties.sheetId;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      requests: [
+        {
+          repeatCell: {
+            // Leaving startRowIndex/endRowIndex unset targets EVERY row in
+            // the column, not just the ones that currently have data.
+            range: { sheetId: tabId, startColumnIndex: phoneCol, endColumnIndex: phoneCol + 1 },
+            cell: { userEnteredFormat: { numberFormat: { type: "TEXT" } } },
+            fields: "userEnteredFormat.numberFormat",
+          },
+        },
+      ],
+    },
+  });
+}
+
+// ── Onboarding: creating or connecting a user's own Rhythm sheet ─────────
+// A signed-in user with no sheetId yet sees the onboarding screen instead
+// of the leads table (see checkSignedIn() in the frontend) - these two
+// endpoints are its two options.
+
+// Creates a brand-new Google Sheet in the user's OWN Drive - using THEIR
+// OAuth tokens (drive.file scope covers creating files this way), never the
+// service account - named "Rhythm Leads", with the correct header row.
+async function createRhythmSheetForUser(user) {
+  const oauthClient = getUserOAuthClient(user);
+  const sheets = google.sheets({ version: "v4", auth: oauthClient });
+
+  const createResponse = await sheets.spreadsheets.create({
+    requestBody: { properties: { title: "Rhythm Leads" } },
+  });
+  const sheetId = createResponse.data.spreadsheetId;
+
+  const headerRow = Object.values(SHEET_CONFIG.columns);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: "A1",
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: [headerRow] },
+  });
+
+  // Fix the "+91..." formula-misread problem from the very start, so a
+  // brand-new sheet never has it.
+  await applyPhoneColumnPlainTextFormat(sheets, sheetId);
+
+  return sheetId;
+}
+
+// POST /api/onboarding/create-sheet: creates a new "Rhythm Leads" sheet in
+// the signed-in user's own Drive and connects it to their account. This is
+// the ONLY onboarding option for now - "connect an existing sheet" would
+// need either the broader (Google-restricted) "spreadsheets" scope or a
+// Google Picker integration, neither of which is built yet. See the
+// onboarding screen's "coming soon" note.
+app.post("/api/onboarding/create-sheet", async (req, res) => {
+  const user = getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in.", reauthRequired: true });
+  }
+
+  try {
+    const sheetId = await createRhythmSheetForUser(user);
+    updateUserSheetId(user.email, sheetId);
+    // createRhythmSheetForUser() already applied the plain-text Phone
+    // format as part of creation - mark it done so getSheetsContextForUser()
+    // doesn't redundantly re-apply it on this user's next request.
+    updateUserPhoneColumnFormatted(user.email);
+    res.json({ success: true, sheetId });
+  } catch (error) {
+    handleSheetsError(res, error);
+  }
+});
+
 // /api/leads: reads every row from the sheet and returns them as JSON.
 app.get("/api/leads", async (req, res) => {
   try {
-    // Demo-mode visitors read the seeded DEMO sheet here, never the real
-    // one - see sheetIdForRequest() above.
-    const sheetId = sheetIdForRequest(req);
-
-    // Get an authenticated client, then create a Sheets API instance.
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
+    // Demo-mode visitors read the seeded DEMO sheet here; everyone else
+    // reads THEIR OWN sheet, via their own OAuth tokens - see
+    // getSheetsContextForRequest() above, the one place this is resolved.
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
     const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
 
@@ -393,8 +584,7 @@ app.get("/api/leads", async (req, res) => {
 
     res.json(leads);
   } catch (error) {
-    console.error("Failed to read leads from Google Sheet:", error.message);
-    res.status(500).json({ error: "Failed to read leads from Google Sheet." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -404,9 +594,7 @@ app.get("/api/leads", async (req, res) => {
 // Powers the compact "due for call-back" banner and its dedicated page.
 app.get("/api/leads/due", async (req, res) => {
   try {
-    const sheetId = sheetIdForRequest(req); // demo sheet in demo mode, real one otherwise
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
     const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
 
@@ -447,8 +635,7 @@ app.get("/api/leads/due", async (req, res) => {
 
     res.json(dueLeads);
   } catch (error) {
-    console.error("Failed to compute due call-backs:", error.message);
-    res.status(500).json({ error: "Failed to compute due call-backs." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -458,9 +645,7 @@ app.get("/api/leads/due", async (req, res) => {
 // means this endpoint never needs updating if a column is added later.
 app.get("/api/leads/:phone", async (req, res) => {
   try {
-    const sheetId = sheetIdForRequest(req); // demo sheet in demo mode, real one otherwise
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
     const lead = await findLeadRow(sheets, req.params.phone, sheetId);
     if (!lead) {
@@ -484,8 +669,7 @@ app.get("/api/leads/:phone", async (req, res) => {
 
     res.json(details);
   } catch (error) {
-    console.error("Failed to load lead detail:", error.message);
-    res.status(500).json({ error: "Failed to load lead detail." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -507,10 +691,9 @@ app.post("/api/leads/:phone/stage", async (req, res) => {
   }
 
   try {
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
-    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
+    const lead = await findLeadRow(sheets, req.params.phone, sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -519,7 +702,7 @@ app.post("/api/leads/:phone/stage", async (req, res) => {
     const stageCol = getColumnIndex(headers, "stage");
 
     await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_CONFIG.sheetId,
+      spreadsheetId: sheetId,
       range: `${columnIndexToLetter(stageCol)}${rowNumber}`,
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[stage]] },
@@ -527,8 +710,7 @@ app.post("/api/leads/:phone/stage", async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Failed to update stage:", error.message);
-    res.status(500).json({ error: "Failed to update stage." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -547,10 +729,9 @@ app.post("/api/leads/:phone/notes", async (req, res) => {
   }
 
   try {
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
-    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
+    const lead = await findLeadRow(sheets, req.params.phone, sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -559,7 +740,7 @@ app.post("/api/leads/:phone/notes", async (req, res) => {
     const notesCol = getColumnIndex(headers, "notes");
 
     await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_CONFIG.sheetId,
+      spreadsheetId: sheetId,
       range: `${columnIndexToLetter(notesCol)}${rowNumber}`,
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[notes]] },
@@ -567,8 +748,7 @@ app.post("/api/leads/:phone/notes", async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Failed to save notes:", error.message);
-    res.status(500).json({ error: "Failed to save notes." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -592,10 +772,9 @@ app.post("/api/leads/:phone/callback", async (req, res) => {
   }
 
   try {
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
-    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
+    const lead = await findLeadRow(sheets, req.params.phone, sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -610,7 +789,7 @@ app.post("/api/leads/:phone/callback", async (req, res) => {
     const valueToStore = callBackOn ? new Date(callBackOn).toLocaleString() : "";
 
     await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_CONFIG.sheetId,
+      spreadsheetId: sheetId,
       range: `${columnIndexToLetter(callBackOnCol)}${rowNumber}`,
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[valueToStore]] },
@@ -618,8 +797,7 @@ app.post("/api/leads/:phone/callback", async (req, res) => {
 
     res.json({ success: true, callBackOn: valueToStore });
   } catch (error) {
-    console.error("Failed to save call-back time:", error.message);
-    res.status(500).json({ error: "Failed to save call-back time." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -635,9 +813,8 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
   // never produce a real transcript to draft from.
   if (isDemoRequest(req)) {
     try {
-      const authClient = await auth.getClient();
-      const sheets = google.sheets({ version: "v4", auth: authClient });
-      const lead = await findLeadRow(sheets, req.params.phone, sheetIdForRequest(req));
+      const { sheets, sheetId } = await getSheetsContextForRequest(req);
+      const lead = await findLeadRow(sheets, req.params.phone, sheetId);
       const nameCol = lead ? getColumnIndex(lead.headers, "name") : -1;
       const leadName = lead ? lead.row[nameCol] || "there" : "there";
       return res.json({
@@ -658,9 +835,8 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
   }
 
   try {
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
-    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
+    const lead = await findLeadRow(sheets, req.params.phone, sheetId);
 
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
@@ -682,8 +858,7 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
 
     res.json({ draft });
   } catch (error) {
-    console.error("Failed to draft follow-up SMS:", error.message);
-    res.status(500).json({ error: "Failed to draft follow-up SMS." });
+    handleSheetsError(res, error);
   }
 });
 
@@ -691,11 +866,8 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
 // sent, and when - so there's always a record of what went out, without
 // needing a whole new sheet column. Clearly marked with a "[SMS sent ...]"
 // prefix so it's easy to tell apart from the rep's own typed notes.
-async function appendSmsLogToNotes(phone, message) {
-  const authClient = await auth.getClient();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
-
-  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
+async function appendSmsLogToNotes(sheets, sheetId, phone, message) {
+  const lead = await findLeadRow(sheets, phone, sheetId);
   if (!lead) {
     console.error("No lead found in the sheet to log the sent SMS against, phone:", phone);
     return;
@@ -709,7 +881,7 @@ async function appendSmsLogToNotes(phone, message) {
   const updatedNotes = existingNotes ? `${existingNotes}\n${logLine}` : logLine;
 
   await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_CONFIG.sheetId,
+    spreadsheetId: sheetId,
     range: `${columnIndexToLetter(notesCol)}${rowNumber}`,
     valueInputOption: "USER_ENTERED",
     requestBody: { values: [[updatedNotes]] },
@@ -731,7 +903,11 @@ app.post("/api/leads/:phone/send-sms", async (req, res) => {
   }
 
   try {
-    await sendSms(req.params.phone, message);
+    // req.params.phone is straight from the sheet - toE164() makes sure
+    // Twilio gets a properly formatted number regardless of how it's
+    // stored (see the comment on toE164() above for why the sheet itself
+    // never needs a leading "+").
+    await sendSms(toE164(req.params.phone), message);
   } catch (error) {
     console.error("Failed to send SMS:", error.message);
     return res.status(500).json({ error: "Failed to send SMS: " + error.message });
@@ -741,7 +917,8 @@ app.post("/api/leads/:phone/send-sms", async (req, res) => {
   // the whole request just because the logging step had a problem. The rep
   // still needs to know the text actually sent.
   try {
-    await appendSmsLogToNotes(req.params.phone, message);
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
+    await appendSmsLogToNotes(sheets, sheetId, req.params.phone, message);
   } catch (error) {
     console.error("SMS sent, but failed to log it to Notes:", error.message);
   }
@@ -755,8 +932,42 @@ const twilioClient = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
-// The public URL Twilio can reach us at (via ngrok). Twilio needs this
-// because it calls OUR server from THEIR servers, not from your browser.
+// ── Verifying requests actually came from Twilio ─────────────────────────
+// /voice and /call-status below are public URLs (Twilio has to be able to
+// reach them from the internet) that TRIGGER real actions - dialing a
+// number, and writing a signed-in user's sheet. Without checking who's
+// really calling them, anyone who found these URLs could forge a fake
+// "call finished" event (e.g. with a different callerEmail) and write to
+// someone else's sheet, or trigger other unwanted behaviour.
+//
+// Twilio signs every request it sends us with an X-Twilio-Signature header,
+// computed from OUR auth token, the exact URL it was told to call, and the
+// request's own params - so only Twilio (who also knows our auth token) can
+// produce a signature that matches. This checks that signature and rejects
+// anything that doesn't match, for every route it's attached to.
+//
+// The URL has to be reconstructed as EXACTLY what we gave Twilio (this is
+// why we always use PUBLIC_BASE_URL, never req.protocol/req.get("host") -
+// those can be rewritten by a proxy in front of the app, e.g. on Render,
+// and would make a genuine request's signature look invalid).
+function validateTwilioRequest(req, res, next) {
+  const signature = req.headers["x-twilio-signature"];
+  const url = `${process.env.PUBLIC_BASE_URL}${req.originalUrl}`;
+
+  const isValid = twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, signature, url, req.body);
+
+  if (!isValid) {
+    console.error(`Rejected a request to ${req.originalUrl} - missing or invalid X-Twilio-Signature.`);
+    return res.status(403).send("Invalid Twilio signature.");
+  }
+
+  next();
+}
+
+// The public URL Twilio can reach us at (via ngrok locally, or your Render
+// URL in production). Twilio needs this because it calls OUR server from
+// THEIR servers, not from your browser - and validateTwilioRequest above
+// needs it to be exactly right, too.
 const CALL_STATUS_CALLBACK_URL = `${process.env.PUBLIC_BASE_URL}/call-status`;
 
 // The WebSocket URL Twilio will stream live call audio to. Media Streams use
@@ -808,6 +1019,17 @@ function mapCallStatusToOutcome(callStatus, sipResponseCode) {
 // "919000000000" are recognized as the same number when matching rows.
 function normalizePhoneNumber(phone) {
   return (phone || "").replace(/\D/g, "");
+}
+
+// Turns a lead's phone number - straight from the sheet, in WHATEVER format
+// it's stored in ("91 98765 43210", "+91 98765 43210", "919876543210", ...)
+// - into the E.164 format ("+919876543210") Twilio actually requires to
+// dial or text it correctly. The sheet itself deliberately never NEEDS a
+// leading "+" (that's what triggers Sheets' formula-parsing bug - see the
+// onboarding empty state's guidance), so this is the one place that adds it
+// back, right before the number is ever handed to Twilio.
+function toE164(phone) {
+  return "+" + normalizePhoneNumber(phone);
 }
 
 // Finds a lead's row by phone number. Returns null if no row matches, or
@@ -877,11 +1099,8 @@ async function findLeadRow(sheets, phone, sheetId) {
 // - Stage and Notes are never touched.
 // Returns the new Attempts count (used as the "call number" for AI insights),
 // or null if no matching lead was found.
-async function updateLeadAfterCall(phone, outcome) {
-  const authClient = await auth.getClient();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
-
-  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
+async function updateLeadAfterCall(sheets, sheetId, phone, outcome) {
+  const lead = await findLeadRow(sheets, phone, sheetId);
   if (!lead) {
     console.error("No lead found in the sheet for phone:", phone);
     return null;
@@ -913,7 +1132,7 @@ async function updateLeadAfterCall(phone, outcome) {
   }
 
   await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: SHEET_CONFIG.sheetId,
+    spreadsheetId: sheetId,
     requestBody: {
       valueInputOption: "USER_ENTERED",
       data: updates.map((update) => ({
@@ -1093,11 +1312,8 @@ function computeCallbackDue(temperatureValue, lastCalledText, callBackOnText, fi
 // Shared by writeAiInsightsToSheet and writeAiInsightsFailurePlaceholder
 // below: finds the lead's row and writes whatever Temperature/AI Notes
 // values it's given into it.
-async function writeAiCells(phone, temperatureValue, notesValue) {
-  const authClient = await auth.getClient();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
-
-  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
+async function writeAiCells(sheets, sheetId, phone, temperatureValue, notesValue) {
+  const lead = await findLeadRow(sheets, phone, sheetId);
   if (!lead) {
     console.error("No lead found in the sheet for AI insights, phone:", phone);
     return;
@@ -1108,7 +1324,7 @@ async function writeAiCells(phone, temperatureValue, notesValue) {
   const aiNotesCol = getColumnIndex(headers, "aiNotes");
 
   await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: SHEET_CONFIG.sheetId,
+    spreadsheetId: sheetId,
     requestBody: {
       valueInputOption: "USER_ENTERED",
       data: [
@@ -1122,11 +1338,11 @@ async function writeAiCells(phone, temperatureValue, notesValue) {
 // Writes the AI-generated Temperature and AI Notes for a lead.
 // Stage is deliberately NOT touched here - suggestedStage is only shown
 // inside the notes block for now, not applied automatically.
-async function writeAiInsightsToSheet(phone, insights) {
+async function writeAiInsightsToSheet(sheets, sheetId, phone, insights) {
   const temperatureLabel = `${insights.temperature} (${temperatureWord(insights.temperature)})`;
   const notesBlock = buildAiNotesBlock(insights);
 
-  await writeAiCells(phone, temperatureLabel, notesBlock);
+  await writeAiCells(sheets, sheetId, phone, temperatureLabel, notesBlock);
   console.log(`AI insights written for ${phone}: Temperature = ${temperatureLabel}`);
 }
 
@@ -1134,8 +1350,8 @@ async function writeAiInsightsToSheet(phone, insights) {
 // Writes an obvious placeholder instead of leaving the cells looking blank
 // or stale, so it's clear this call still needs insights generated - either
 // automatically next time, or via POST /api/regenerate-insights.
-async function writeAiInsightsFailurePlaceholder(phone) {
-  await writeAiCells(phone, "—", "AI insights unavailable — will retry later");
+async function writeAiInsightsFailurePlaceholder(sheets, sheetId, phone) {
+  await writeAiCells(sheets, sheetId, phone, "—", "AI insights unavailable — will retry later");
   console.log(`AI insights failed for ${phone} - wrote placeholder to sheet`);
 }
 
@@ -1145,14 +1361,14 @@ async function writeAiInsightsFailurePlaceholder(phone) {
 // any sheet-writing error is caught here so it never breaks /call-status.
 // Returns the insights object (or null if it failed) - the caller uses this
 // to update the cross-call "Previous Calls" history, see below.
-async function generateAndSaveInsights(phone, transcriptText, callNumber) {
+async function generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber) {
   const insights = await generateCallInsights(transcriptText, callNumber);
 
   try {
     if (insights) {
-      await writeAiInsightsToSheet(phone, insights);
+      await writeAiInsightsToSheet(sheets, sheetId, phone, insights);
     } else {
-      await writeAiInsightsFailurePlaceholder(phone);
+      await writeAiInsightsFailurePlaceholder(sheets, sheetId, phone);
     }
   } catch (error) {
     console.error("Failed to write AI insights to sheet:", error.message);
@@ -1209,7 +1425,7 @@ function appendCallHistoryEntry(phone, entry) {
 // the spec - there's no "relationship" to summarize yet.
 // Safe to call even if insights is null (the per-call AI attempt failed) -
 // there's nothing worth recording in that case, so this just does nothing.
-async function updateRelationshipHistory(phone, insights, transcriptText, callNumber) {
+async function updateRelationshipHistory(sheets, sheetId, phone, insights, transcriptText, callNumber) {
   if (!insights) return; // per-call AI attempt failed - nothing to record
 
   appendCallHistoryEntry(phone, {
@@ -1224,10 +1440,7 @@ async function updateRelationshipHistory(phone, insights, transcriptText, callNu
   if (callNumber <= 1) return; // first call - "Previous Calls" stays blank
 
   try {
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
-
-    const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
+    const lead = await findLeadRow(sheets, phone, sheetId);
     if (!lead) {
       console.error("No lead found in the sheet for relationship summary, phone:", phone);
       return;
@@ -1240,7 +1453,7 @@ async function updateRelationshipHistory(phone, insights, transcriptText, callNu
     if (!updatedSummary) return; // already logged inside the AI provider
 
     await sheets.spreadsheets.values.update({
-      spreadsheetId: SHEET_CONFIG.sheetId,
+      spreadsheetId: sheetId,
       range: `${columnIndexToLetter(previousCallsCol)}${lead.rowNumber}`,
       valueInputOption: "USER_ENTERED",
       requestBody: { values: [[updatedSummary]] },
@@ -1260,15 +1473,23 @@ function buildGreetingTwiml() {
   return response.toString();
 }
 
+// Adds ?callerEmail=... onto a callback URL, so /call-status (which Twilio
+// calls server-to-server, with no browser session) can still work out
+// WHICH signed-in user's sheet this call belongs to. See getSheetsContext-
+// ForEmail() above and the /call-status handler below.
+function withCallerEmail(url, callerEmail) {
+  return callerEmail ? `${url}?callerEmail=${encodeURIComponent(callerEmail)}` : url;
+}
+
 // Places a call to the given phone number and speaks the greeting when answered.
 // Returns the Twilio call object (which includes a "sid" - the call's unique ID).
-function placeCall(toNumber) {
+function placeCall(toNumber, callerEmail) {
   return twilioClient.calls.create({
     to: toNumber,
     from: process.env.TWILIO_FROM_NUMBER,
     twiml: buildGreetingTwiml(),
     // Tells Twilio to notify our /call-status endpoint once the call finishes
-    statusCallback: CALL_STATUS_CALLBACK_URL,
+    statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail),
     statusCallbackEvent: ["completed"],
     statusCallbackMethod: "POST",
   });
@@ -1291,7 +1512,8 @@ app.post("/api/call", async (req, res) => {
   }
 
   try {
-    const call = await placeCall(to);
+    const user = getCurrentUser(req);
+    const call = await placeCall(to, user ? user.email : null);
     res.json({ success: true, callSid: call.sid });
   } catch (error) {
     // Twilio errors have a helpful .message - send it back so we can see what went wrong
@@ -1315,7 +1537,8 @@ app.get("/api/test-call", async (req, res) => {
   }
 
   try {
-    const call = await placeCall(to);
+    const user = getCurrentUser(req);
+    const call = await placeCall(to, user ? user.email : null);
     res.json({ success: true, callSid: call.sid });
   } catch (error) {
     console.error("Twilio test call failed:", error.message);
@@ -1370,9 +1593,18 @@ app.get("/api/token", (req, res) => {
 // POST /voice: Twilio calls this endpoint itself when the browser starts a
 // call, asking "what should happen now?". We reply with TwiML that dials
 // the phone number the browser asked for, showing our Twilio number as the
-// caller ID.
-app.post("/voice", (req, res) => {
-  const to = req.body.To;
+// caller ID. validateTwilioRequest (above) rejects anything not genuinely
+// signed by Twilio before this handler ever runs.
+app.post("/voice", validateTwilioRequest, (req, res) => {
+  // Straight from the lead's sheet row, in whatever format it's stored in -
+  // toE164() below is what makes sure Twilio actually dials it correctly
+  // regardless (the sheet itself never has to store a leading "+").
+  const to = req.body.To ? toE164(req.body.To) : "";
+  // Set by the browser's device.connect({ params: { To, callerEmail } }) -
+  // see attachCallHandlers() in the frontend - so /call-status below (which
+  // Twilio calls with no browser session at all) can still work out WHICH
+  // signed-in user's sheet this call belongs to.
+  const callerEmail = req.body.callerEmail || "";
   const response = new twilio.twiml.VoiceResponse();
 
   if (to) {
@@ -1391,10 +1623,12 @@ app.post("/voice", (req, res) => {
 
     const dial = response.dial({ callerId: process.env.TWILIO_FROM_NUMBER });
 
-    // Tells Twilio to notify our /call-status endpoint once this call finishes
+    // Tells Twilio to notify our /call-status endpoint once this call
+    // finishes - with callerEmail carried through the URL itself, since
+    // Twilio's status callback request won't have our session cookie.
     dial.number(
       {
-        statusCallback: CALL_STATUS_CALLBACK_URL,
+        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail),
         statusCallbackEvent: ["completed"],
         statusCallbackMethod: "POST",
       },
@@ -1430,7 +1664,7 @@ const CALL_LOG_FILE_PATH = path.join(__dirname, "call-log.json");
 const DEMO_CALL_LOG_FILE_PATH = path.join(__dirname, "call-log.demo.json");
 
 // Picks which of the two files above a request's Analytics data should
-// come from - same idea as sheetIdForRequest() above.
+// come from - same demo-vs-real idea as getSheetsContextForRequest() above.
 function callLogPathForRequest(req) {
   return isDemoRequest(req) ? DEMO_CALL_LOG_FILE_PATH : CALL_LOG_FILE_PATH;
 }
@@ -1464,11 +1698,8 @@ function appendCallLogEntry(entry) {
 // null if it hasn't been set yet). Used to record what the lead's
 // temperature was BEFORE this call - i.e. what we believed about them going
 // in, not what this call's own (not-yet-generated) insights might say.
-async function getLeadNameAndTemperature(phone) {
-  const authClient = await auth.getClient();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
-
-  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
+async function getLeadNameAndTemperature(sheets, sheetId, phone) {
+  const lead = await findLeadRow(sheets, phone, sheetId);
   if (!lead) return { name: "", temperatureValue: null };
 
   const nameCol = getColumnIndex(lead.headers, "name");
@@ -1579,7 +1810,6 @@ function computeAnalytics(calls) {
 //                                       together (e.g. 14-16 = 2pm-4pm)
 app.get("/api/analytics", async (req, res) => {
   try {
-    const sheetId = sheetIdForRequest(req); // demo sheet in demo mode, real one otherwise
     const log = loadCallLog(callLogPathForRequest(req));
 
     // A plain date-only string like "2026-07-10" parses as UTC midnight if
@@ -1599,46 +1829,52 @@ app.get("/api/analytics", async (req, res) => {
 
     // The call-back pipeline counts are a live SNAPSHOT of the sheet right
     // now, not from the call log - there's no "when" to filter these two by,
-    // so the date/time filters above don't apply to them.
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
-    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
-
-    const nameCol = getColumnIndex(headers, "name");
-    const phoneCol = getColumnIndex(headers, "phone");
-    const temperatureCol = getColumnIndex(headers, "temperature");
-    const lastCalledCol = getColumnIndex(headers, "lastCalled");
-    const callBackOnCol = getColumnIndex(headers, "callBackOn");
-    const firstConnectedCol = getColumnIndex(headers, "firstConnected");
-
+    // so the date/time filters above don't apply to them. This is the only
+    // sheet-dependent part of this endpoint, so a signed-in user who hasn't
+    // onboarded yet still gets their call-log-based numbers, just with
+    // these two at 0, rather than the whole dashboard failing.
     let callbacksDueNow = 0;
     let callbacksUpcoming = 0;
-    const now = new Date();
 
-    dataRows.forEach((row) => {
-      const name = row[nameCol] || "";
-      const phone = row[phoneCol] || "";
-      if (!name && !phone) return; // skip blank rows
+    try {
+      const { sheets, sheetId } = await getSheetsContextForRequest(req);
+      const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
 
-      const temperatureValue = parseTemperatureValue(row[temperatureCol]);
-      const due = computeCallbackDue(
-        temperatureValue,
-        row[lastCalledCol] || "",
-        row[callBackOnCol] || "",
-        row[firstConnectedCol] || ""
-      );
+      const nameCol = getColumnIndex(headers, "name");
+      const phoneCol = getColumnIndex(headers, "phone");
+      const temperatureCol = getColumnIndex(headers, "temperature");
+      const lastCalledCol = getColumnIndex(headers, "lastCalled");
+      const callBackOnCol = getColumnIndex(headers, "callBackOn");
+      const firstConnectedCol = getColumnIndex(headers, "firstConnected");
+      const now = new Date();
 
-      if (due) {
-        callbacksDueNow++;
-        return;
-      }
+      dataRows.forEach((row) => {
+        const name = row[nameCol] || "";
+        const phone = row[phoneCol] || "";
+        if (!name && !phone) return; // skip blank rows
 
-      const callBackOnText = row[callBackOnCol] || "";
-      if (callBackOnText) {
-        const callBackDate = new Date(callBackOnText);
-        if (!isNaN(callBackDate) && callBackDate > now) callbacksUpcoming++;
-      }
-    });
+        const temperatureValue = parseTemperatureValue(row[temperatureCol]);
+        const due = computeCallbackDue(
+          temperatureValue,
+          row[lastCalledCol] || "",
+          row[callBackOnCol] || "",
+          row[firstConnectedCol] || ""
+        );
+
+        if (due) {
+          callbacksDueNow++;
+          return;
+        }
+
+        const callBackOnText = row[callBackOnCol] || "";
+        if (callBackOnText) {
+          const callBackDate = new Date(callBackOnText);
+          if (!isNaN(callBackDate) && callBackDate > now) callbacksUpcoming++;
+        }
+      });
+    } catch (error) {
+      console.error("Could not compute call-back pipeline counts:", error.message);
+    }
 
     res.json({ ...analytics, callbacksDueNow, callbacksUpcoming });
   } catch (error) {
@@ -1669,19 +1905,44 @@ const COACHING_WINDOW_LINES = 12;
 // POST /call-status: Twilio sends a request here once a call finishes.
 // We read the outcome, map it to a friendly label, update the sheet, and
 // (if we captured a transcript) generate AI insights for the call.
-app.post("/call-status", async (req, res) => {
+// validateTwilioRequest (above) is what makes it safe to trust callerEmail
+// below - without it, anyone who found this URL could claim to be any user.
+app.post("/call-status", validateTwilioRequest, async (req, res) => {
   const { To, CallStatus, SipResponseCode, CallDuration } = req.body;
+  // Twilio calls this endpoint directly, server-to-server - there's no
+  // browser session/cookie here at all, so the signed-in rep's email was
+  // threaded through the callback URL's query string instead (see /voice
+  // and placeCall() above, which set it).
+  const callerEmail = req.query.callerEmail;
 
-  console.log("Call finished:", To, CallStatus, SipResponseCode);
+  console.log("Call finished:", To, CallStatus, SipResponseCode, "for", callerEmail || "(no callerEmail)");
 
   const outcome = mapCallStatusToOutcome(CallStatus, SipResponseCode);
+
+  // Resolve WHICH user's sheet this call belongs to, ONCE, up front. If we
+  // can't (missing/unknown email, expired tokens), we still log the call
+  // for analytics below, just without a name/temperature pulled from any
+  // sheet, and skip the sheet-writing/AI-insights step entirely rather than
+  // guessing at some other sheet.
+  let sheetsContext = null;
+  if (callerEmail) {
+    try {
+      sheetsContext = await getSheetsContextForEmail(callerEmail);
+    } catch (error) {
+      console.error("Could not resolve a sheet for", callerEmail, "-", error.message);
+    }
+  } else {
+    console.error("No callerEmail on /call-status - can't update any sheet for this call.");
+  }
 
   // Log this call as its own record FIRST, in its own try/catch. This way,
   // a problem further down (sheet update, AI insights) can never stop the
   // call from being recorded for analytics, and a logging hiccup here can
   // never stop the rest of the normal call-handling below.
   try {
-    const { name, temperatureValue } = await getLeadNameAndTemperature(To);
+    const { name, temperatureValue } = sheetsContext
+      ? await getLeadNameAndTemperature(sheetsContext.sheets, sheetsContext.sheetId, To)
+      : { name: "", temperatureValue: null };
 
     appendCallLogEntry({
       timestamp: new Date().toISOString(), // ISO so it sorts/parses reliably
@@ -1698,40 +1959,43 @@ app.post("/call-status", async (req, res) => {
     console.error("Failed to log call record:", error.message);
   }
 
-  try {
-    const callNumber = await updateLeadAfterCall(To, outcome);
+  if (sheetsContext) {
+    try {
+      const { sheets, sheetId } = sheetsContext;
+      const callNumber = await updateLeadAfterCall(sheets, sheetId, To, outcome);
 
-    // Grab whatever transcript lines we recorded for this call. We deliberately
-    // do NOT delete it here - we keep the most recent call's transcript around
-    // in memory so POST /api/regenerate-insights can re-run insights later if
-    // this attempt fails. (The next call to this same lead will replace it
-    // with a fresh, empty transcript when it starts.)
-    const normalizedPhone = normalizePhoneNumber(To);
-    const transcriptLines = callTranscripts.get(normalizedPhone) || [];
+      // Grab whatever transcript lines we recorded for this call. We deliberately
+      // do NOT delete it here - we keep the most recent call's transcript around
+      // in memory so POST /api/regenerate-insights can re-run insights later if
+      // this attempt fails. (The next call to this same lead will replace it
+      // with a fresh, empty transcript when it starts.)
+      const normalizedPhone = normalizePhoneNumber(To);
+      const transcriptLines = callTranscripts.get(normalizedPhone) || [];
 
-    if (callNumber && transcriptLines.length > 0) {
-      // Save it to a local file too, so it's easy to reuse for testing later
-      // via POST /api/test-insights or GET /api/last-transcript - this is
-      // "nice to have" only, so a failure here should never break the call.
-      try {
-        fs.writeFileSync(
-          LAST_TRANSCRIPT_FILE_PATH,
-          JSON.stringify(
-            { phone: To, callNumber, savedAt: new Date().toISOString(), transcript: transcriptLines },
-            null,
-            2
-          )
-        );
-      } catch (error) {
-        console.error("Failed to save last-transcript.json:", error.message);
+      if (callNumber && transcriptLines.length > 0) {
+        // Save it to a local file too, so it's easy to reuse for testing later
+        // via POST /api/test-insights or GET /api/last-transcript - this is
+        // "nice to have" only, so a failure here should never break the call.
+        try {
+          fs.writeFileSync(
+            LAST_TRANSCRIPT_FILE_PATH,
+            JSON.stringify(
+              { phone: To, callNumber, savedAt: new Date().toISOString(), transcript: transcriptLines },
+              null,
+              2
+            )
+          );
+        } catch (error) {
+          console.error("Failed to save last-transcript.json:", error.message);
+        }
+
+        const transcriptText = transcriptLinesToText(transcriptLines);
+        const insights = await generateAndSaveInsights(sheets, sheetId, To, transcriptText, callNumber);
+        await updateRelationshipHistory(sheets, sheetId, To, insights, transcriptText, callNumber);
       }
-
-      const transcriptText = transcriptLinesToText(transcriptLines);
-      const insights = await generateAndSaveInsights(To, transcriptText, callNumber);
-      await updateRelationshipHistory(To, insights, transcriptText, callNumber);
+    } catch (error) {
+      console.error("Failed to update sheet after call:", error.message);
     }
-  } catch (error) {
-    console.error("Failed to update sheet after call:", error.message);
   }
 
   // Twilio just needs a 200 OK here - it doesn't use the response body.
@@ -1765,9 +2029,8 @@ app.post("/api/regenerate-insights", async (req, res) => {
   }
 
   try {
-    const authClient = await auth.getClient();
-    const sheets = google.sheets({ version: "v4", auth: authClient });
-    const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
+    const lead = await findLeadRow(sheets, phone, sheetId);
 
     if (!lead) {
       return res.status(404).json({ error: "No lead found in the sheet for this phone number." });
@@ -1779,13 +2042,12 @@ app.post("/api/regenerate-insights", async (req, res) => {
     const callNumber = parseInt(lead.row[attemptsCol], 10) || 1;
 
     const transcriptText = transcriptLinesToText(transcriptLines);
-    const insights = await generateAndSaveInsights(phone, transcriptText, callNumber);
-    await updateRelationshipHistory(phone, insights, transcriptText, callNumber);
+    const insights = await generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber);
+    await updateRelationshipHistory(sheets, sheetId, phone, insights, transcriptText, callNumber);
 
     res.json({ success: true, message: "AI insights regenerated." });
   } catch (error) {
-    console.error("Failed to regenerate AI insights:", error.message);
-    res.status(500).json({ error: error.message });
+    handleSheetsError(res, error);
   }
 });
 
