@@ -2,31 +2,138 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rhythm — Analytics</title>
+  <title>Rhythm.ai — Analytics</title>
 
   <!-- Chart.js - a simple, popular charting library, loaded from a CDN (no
        install needed), same way the Twilio Voice SDK is loaded elsewhere. -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 
+  <!-- Google Fonts: Space Grotesk (display/headings/numbers) + Inter (body/UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <style>
+    /* ── Design tokens - identical set to index.html/callbacks.html, so all
+       three pages feel like one consistent product. */
+    :root {
+      /* Warm paper backgrounds - not cool grey */
+      --bg-page: #FAF9F7;
+      --bg-subtle: #F0ECE5;
+      --bg-surface: #FFFFFF;
+      --bg-hover: #F5F1EA;
+
+      /* A warm near-black for real contrast, not a mid-grey or a cool slate */
+      --ink: #211D18;
+      --ink-muted: #6E6459;
+      --ink-faint: #948C7F;
+      --border: #E4DFD6;
+      --border-strong: #D2CABC;
+
+      /* Slate blue stays reserved for structure/interactive chrome. */
+      --interactive: #4A90E2;
+      --interactive-hover: #3A7BC8;
+      --interactive-bg: #EAF2FC;
+
+      /* Sage green stays STRICTLY for primary actions/success. */
+      --accent: #2ECC71;
+      --accent-hover: #27AE60;
+      --accent-ink: #1B7943;
+      --accent-bg: #E9F9EF;
+
+      /* Temperature colours - a touch more saturated than the warm neutral
+         chrome, and distinct from the interactive blue. */
+      --cold-bg: #D8EEEA;
+      --cold-ink: #0E5F55;
+      --warm-bg: #FBE3B8;
+      --warm-ink: #8A5900;
+      --hot-bg: #F8D2CA;
+      --hot-ink: #A32E1F;
+      --none-bg: #EDE8E1;
+      --none-ink: #6E6459;
+
+      /* Typography: Space Grotesk for display/headings/numbers, Inter for
+         body/UI. */
+      --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --text-title: 1.75rem;
+      --text-section: 1.05rem;
+      --text-body: 0.9375rem;
+      --text-meta: 0.8125rem;
+      --text-micro: 0.75rem;
+
+      --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
+      --transition: 160ms ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    :focus-visible {
+      outline: 2px solid var(--interactive);
+      outline-offset: 2px;
+    }
+
     /* Same basic page setup as the other pages, so all three feel consistent */
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f7f9;
-      color: #1f2328;
+      font-family: var(--font-sans);
+      background: var(--bg-page);
+      color: var(--ink);
       margin: 0;
-      padding: 2rem;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page-shell {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: var(--sp-5) var(--sp-6) var(--sp-6);
     }
 
     h1 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
+      font-family: var(--font-display);
+      font-size: var(--text-title);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin: 0 0 var(--sp-2) 0;
+      color: var(--ink);
+    }
+
+    /* Brand wordmark - identical treatment to the other two pages. */
+    .brand-wordmark {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .brand-wordmark .brand-suffix {
+      color: var(--interactive);
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-5);
     }
 
     .page-subtitle {
-      margin: 0 0 1.5rem 0;
-      color: #57606a;
+      margin: 0 0 var(--sp-5) 0;
+      color: var(--ink-muted);
       font-size: 0.9rem;
     }
 
@@ -37,58 +144,282 @@
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      border-bottom: 1px solid #e2e2e6;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-5);
+      padding: 0 var(--sp-6);
+      border-bottom: 1px solid var(--border);
     }
 
     /* Clean tab navigation, same on every page. */
     .tab-nav {
       display: flex;
-      gap: 0.25rem;
+      gap: var(--sp-1);
     }
 
     .tab-link {
-      padding: 0.6rem 1rem;
+      padding: var(--sp-3) var(--sp-4);
       font-size: 0.9rem;
       font-weight: 600;
-      color: #57606a;
+      color: var(--ink-muted);
       text-decoration: none;
       border-bottom: 2px solid transparent;
+      transition: color var(--transition), border-color var(--transition);
     }
 
     .tab-link:hover {
-      color: #1f2328;
+      color: var(--ink);
     }
 
     .tab-link.active {
-      color: #1d4ed8;
-      border-bottom-color: #1d4ed8;
+      color: var(--ink);
+      border-bottom-color: var(--interactive);
     }
 
     .user-bar {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: var(--sp-3);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+      padding: 0 var(--sp-1);
+    }
+
+    /* The signed-in user's name - clickable (opens the profile panel) only
+       for a real signed-in user, not demo mode - see checkSignedIn(). */
+    .user-name-button {
+      font-family: inherit;
+      font-size: inherit;
+      font-weight: 600;
+      color: var(--ink);
+      background: none;
+      border: none;
+      padding: var(--sp-1) var(--sp-2);
+      border-radius: var(--radius-sm);
+      cursor: default;
+    }
+
+    .user-name-button.clickable {
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .user-name-button.clickable:hover {
+      background: var(--bg-hover);
+    }
+
+    /* ── Profile panel ────────────────────────────────────────────────────
+       This page has no other slide-in panel, so (unlike index.html/
+       callbacks.html, which reuse their existing lead detail panel styles)
+       these are defined here from scratch, just for the profile panel. */
+    .panel-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(33, 29, 24, 0.35);
+      z-index: 10;
+    }
+
+    .panel-overlay.open {
+      display: block;
+    }
+
+    .lead-panel {
+      position: fixed;
+      top: 0;
+      right: -440px;
+      width: 440px;
+      max-width: 90vw;
+      height: 100vh;
+      background: var(--bg-surface);
+      box-shadow: -8px 0 32px rgba(33, 29, 24, 0.16);
+      z-index: 11;
+      overflow-y: auto;
+      box-sizing: border-box;
+      transition: right var(--transition);
+    }
+
+    .lead-panel.open {
+      right: 0;
+    }
+
+    .panel-close-button {
+      position: absolute;
+      top: var(--sp-4);
+      right: var(--sp-4);
+      border: none;
+      background: none;
+      font-size: 1.3rem;
+      line-height: 1;
+      cursor: pointer;
+      color: var(--ink-muted);
+    }
+
+    .panel-content {
+      padding: var(--sp-5);
+    }
+
+    .panel-header h2 {
+      font-family: var(--font-display);
+      margin: 0 0 var(--sp-1) 0;
+      font-size: 1.25rem;
+      color: var(--ink);
+    }
+
+    .panel-phone {
+      margin: 0 0 var(--sp-3) 0;
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+    }
+
+    .panel-section {
+      padding: var(--sp-4) 0;
+    }
+
+    .panel-section + .panel-section {
+      border-top: 1px solid var(--bg-subtle);
+    }
+
+    .panel-section-title {
+      font-family: var(--font-display);
+      margin: 0 0 var(--sp-2) 0;
+      font-size: var(--text-micro);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink-muted);
+    }
+
+    .call-status {
+      margin-left: var(--sp-2);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+    }
+
+    /* Buttons - same primary/secondary roles as the other two pages
+       (primary sage green for Save; secondary quiet elsewhere). */
+    .call-button,
+    .btn-secondary {
+      font-family: inherit;
       font-size: 0.85rem;
-      color: #57606a;
-      padding: 0 0.25rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2) var(--sp-4);
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: background var(--transition), border-color var(--transition), color var(--transition);
+    }
+
+    .call-button {
+      color: #ffffff;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .call-button:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      color: var(--ink);
+      background: var(--bg-surface);
+      border-color: var(--border-strong);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
+    }
+
+    .profile-avatar-large {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: var(--sp-3);
+    }
+
+    .profile-avatar-placeholder {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--interactive-bg);
+      color: var(--interactive);
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--sp-3);
+    }
+
+    .company-row {
+      display: flex;
+      gap: var(--sp-2);
+      align-items: center;
+    }
+
+    .company-input {
+      flex: 1;
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+    }
+
+    .company-input:focus-visible {
+      border-color: var(--interactive);
+    }
+
+    .profile-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-3);
+    }
+
+    .profile-stat-tile {
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-3);
+    }
+
+    .profile-stat-value {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .profile-stat-label {
+      font-size: var(--text-micro);
+      color: var(--ink-muted);
+      margin-top: var(--sp-1);
+    }
+
+    .profile-signout-row {
+      margin-top: var(--sp-5);
     }
 
     .sign-out-button {
       font-family: inherit;
-      font-size: 0.8rem;
+      font-size: var(--text-meta);
       font-weight: 600;
-      color: #57606a;
-      background: #f0f0f3;
-      border: 1px solid #d8d8dc;
-      border-radius: 6px;
-      padding: 0.3rem 0.7rem;
+      color: var(--ink-muted);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2) var(--sp-3);
       cursor: pointer;
+      transition: background var(--transition), border-color var(--transition);
     }
 
     .sign-out-button:hover {
-      background: #e6e6ea;
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
     }
 
     /* Full-page overlay shown INSTEAD of the app when nobody's signed in. */
@@ -96,150 +427,180 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: #f7f7f9;
+      background: var(--bg-page);
       z-index: 100;
       align-items: center;
       justify-content: center;
     }
 
+    /* The sign-in screen is the first impression - clean, spacious,
+       confident. Same treatment as the other two pages. */
     .sign-in-card {
-      background: #ffffff;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      padding: 2.5rem 3rem;
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: 3.5rem 3.5rem;
       text-align: center;
-      max-width: 360px;
+      max-width: 440px;
     }
 
-    .sign-in-card h1 {
-      margin: 0 0 0.5rem 0;
+    .signin-wordmark {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.6rem;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-bottom: var(--sp-5);
     }
 
-    .sign-in-card p {
-      color: #57606a;
-      font-size: 0.95rem;
-      margin: 0 0 1.5rem 0;
+    .signin-wordmark .brand-suffix {
+      color: var(--interactive);
+    }
+
+    .signin-headline {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      margin: 0 0 var(--sp-3) 0;
+    }
+
+    .signin-subhead {
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+      line-height: 1.6;
+      margin: 0 0 var(--sp-6) 0;
     }
 
     .google-signin-button {
       display: inline-block;
-      background: #1d4ed8;
+      background: var(--interactive);
       color: #ffffff;
       text-decoration: none;
       font-weight: 600;
       font-size: 0.95rem;
-      padding: 0.6rem 1.25rem;
-      border-radius: 6px;
+      padding: var(--sp-3) var(--sp-6);
+      border-radius: var(--radius-sm);
+      transition: background var(--transition);
     }
 
     .google-signin-button:hover {
-      background: #1739a8;
+      background: var(--interactive-hover);
     }
 
     /* Secondary option on the sign-in card - links straight to GET /demo. */
     .view-demo-button {
       display: inline-block;
-      margin-top: 0.75rem;
-      color: #1d4ed8;
+      margin-top: var(--sp-4);
+      color: var(--ink-muted);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.9rem;
     }
 
     .view-demo-button:hover {
+      color: var(--interactive);
       text-decoration: underline;
     }
 
     /* Always-visible strip while in DEMO MODE - see checkSignedIn(). */
     .demo-banner {
       display: none; /* JS switches this to "block" only in demo mode */
-      background: #fef3c7;
-      color: #92400e;
+      background: var(--warm-bg);
+      color: var(--warm-ink);
       text-align: center;
-      font-size: 0.85rem;
+      font-size: var(--text-meta);
       font-weight: 600;
-      padding: 0.4rem;
+      padding: var(--sp-2);
     }
 
     .card {
-      background: #ffffff;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      padding: 1.25rem 1.5rem;
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: var(--sp-4) var(--sp-5);
     }
 
     .message {
-      padding: 1.5rem;
-      color: #57606a;
-      font-size: 0.95rem;
+      padding: var(--sp-5);
+      color: var(--ink-muted);
+      font-size: var(--text-body);
     }
 
     /* ── Filters ─────────────────────────────────────────────────────── */
     .filters-card {
-      margin-bottom: 1.5rem;
+      margin-bottom: var(--sp-5);
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 1rem;
+      gap: var(--sp-4);
       font-size: 0.9rem;
-      color: #57606a;
+      color: var(--ink-muted);
     }
 
     .filter-group {
       display: flex;
       align-items: center;
-      gap: 0.4rem;
+      gap: var(--sp-2);
     }
 
     .filters-card select,
     .filters-card input {
       font-family: inherit;
-      font-size: 0.85rem;
-      padding: 0.3rem 0.5rem;
-      border: 1px solid #d8d8dc;
-      border-radius: 6px;
-      background: #ffffff;
+      font-size: var(--text-meta);
+      padding: var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      color: var(--ink);
     }
 
     /* ── Metric tiles ────────────────────────────────────────────────── */
     .metrics-row {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: var(--sp-4);
+      margin-bottom: var(--sp-5);
     }
 
     .metric-tile {
-      background: #ffffff;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      padding: 1rem 1.25rem;
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: var(--sp-4) var(--sp-5);
     }
 
     .metric-value {
-      font-size: 1.6rem;
+      font-family: var(--font-display);
+      font-size: 1.75rem;
       font-weight: 700;
       line-height: 1.2;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
     }
 
     .metric-label {
-      margin-top: 0.25rem;
-      font-size: 0.8rem;
-      color: #57606a;
+      margin-top: var(--sp-1);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
     }
 
     /* ── Charts ──────────────────────────────────────────────────────── */
     .charts-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 1.5rem;
+      gap: var(--sp-5);
+      margin-bottom: var(--sp-5);
     }
 
     .chart-card h2 {
-      font-size: 1rem;
+      font-family: var(--font-display);
+      font-size: var(--text-section);
       font-weight: 600;
-      margin: 0 0 1rem 0;
+      margin: 0 0 var(--sp-4) 0;
+      color: var(--ink);
     }
 
     /* Keeps each chart a sensible, fixed height - Chart.js fills whatever
@@ -253,14 +614,14 @@
        pie chart - so the numbers are always visible directly as text, not
        ONLY conveyed through chart colours/slice sizes. */
     .chart-legend-list {
-      margin: 0.75rem 0 0 0;
+      margin: var(--sp-3) 0 0 0;
       padding: 0;
       list-style: none;
-      font-size: 0.85rem;
-      color: #57606a;
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
       display: flex;
       flex-wrap: wrap;
-      gap: 0.5rem 1.25rem;
+      gap: var(--sp-2) var(--sp-5);
     }
   </style>
 </head>
@@ -269,11 +630,12 @@
        see checkSignedIn(). -->
   <div id="signInOverlay" class="sign-in-overlay">
     <div class="sign-in-card">
-      <h1>Rhythm</h1>
-      <p>Sign in with your Google account to manage your leads.</p>
+      <div class="signin-wordmark">Rhythm<span class="brand-suffix">.ai</span></div>
+      <h1 class="signin-headline">Find your rhythm. Close more.</h1>
+      <p class="signin-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
       <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
       <br />
-      <a href="/demo" class="view-demo-button">View Demo (no sign-in needed)</a>
+      <a href="/demo" class="view-demo-button">View Demo</a>
     </div>
   </div>
 
@@ -282,93 +644,105 @@
 
   <!-- Same top bar on every page. This page marks "Analytics" as active. -->
   <div class="top-bar">
-    <nav class="tab-nav">
-      <a href="index.html" class="tab-link">Leads</a>
-      <a href="callbacks.html" class="tab-link">Call-backs</a>
-      <a href="analytics.html" class="tab-link active">Analytics</a>
-    </nav>
+    <div class="top-bar-left">
+      <span class="brand-wordmark">Rhythm<span class="brand-suffix">.ai</span></span>
+      <nav class="tab-nav">
+        <a href="index.html" class="tab-link">Leads</a>
+        <a href="callbacks.html" class="tab-link">Call-backs</a>
+        <a href="analytics.html" class="tab-link active">Analytics</a>
+      </nav>
+    </div>
     <div class="user-bar">
-      <span id="userBarName"></span>
+      <button id="userBarName" type="button" class="user-name-button"></button>
       <button id="signOutButton" class="sign-out-button">Sign out</button>
     </div>
   </div>
 
-  <h1>Analytics</h1>
-  <p class="page-subtitle">Computed from your per-call log - use the filters below to zoom into a date range or time of day.</p>
-
-  <!-- ── Filters ──────────────────────────────────────────────────────── -->
-  <div class="card filters-card">
-    <div class="filter-group">
-      <label for="dateRangePreset">Date range:</label>
-      <select id="dateRangePreset">
-        <option value="all">All time</option>
-        <option value="today">Today</option>
-        <option value="last7">Last 7 days</option>
-        <option value="custom">Custom</option>
-      </select>
-    </div>
-
-    <!-- Only shown when "Custom" is picked above - see showOrHideCustomDates() -->
-    <div class="filter-group" id="customDateGroup" style="display: none;">
-      <input type="date" id="customFrom">
-      <span>to</span>
-      <input type="date" id="customTo">
-    </div>
-
-    <div class="filter-group">
-      <label for="hourFrom">Time of day:</label>
-      <input type="number" id="hourFrom" min="0" max="23" placeholder="hour from">
-      <span>to</span>
-      <input type="number" id="hourTo" min="0" max="23" placeholder="hour to">
-      <span>(leave blank for no filter, e.g. 14 to 16 = 2pm-4pm)</span>
-    </div>
+  <!-- Profile panel - see index.html's copy of this for the full explanation. -->
+  <div id="profilePanelOverlay" class="panel-overlay"></div>
+  <div id="profilePanel" class="lead-panel">
+    <button id="profilePanelCloseButton" class="panel-close-button" aria-label="Close">×</button>
+    <div id="profilePanelContent" class="panel-content"></div>
   </div>
 
-  <!-- ── Key metrics ──────────────────────────────────────────────────── -->
-  <div class="metrics-row">
-    <div class="metric-tile">
-      <div class="metric-value" id="metricTotalCalls">-</div>
-      <div class="metric-label">Total calls</div>
-    </div>
-    <div class="metric-tile">
-      <div class="metric-value" id="metricConnected">-</div>
-      <div class="metric-label">Connected</div>
-    </div>
-    <div class="metric-tile">
-      <div class="metric-value" id="metricNotConnected">-</div>
-      <div class="metric-label">Not connected</div>
-    </div>
-    <div class="metric-tile">
-      <div class="metric-value" id="metricPickupRate">-</div>
-      <div class="metric-label">Pick-up rate</div>
-    </div>
-    <div class="metric-tile">
-      <div class="metric-value" id="metricCallbacks">-</div>
-      <div class="metric-label">Call-backs (due now / upcoming)</div>
-    </div>
-  </div>
+  <div class="page-shell">
+    <h1>Analytics</h1>
+    <p class="page-subtitle">Computed from your per-call log - use the filters below to zoom into a date range or time of day.</p>
 
-  <!-- ── Charts ───────────────────────────────────────────────────────── -->
-  <!-- Shown INSTEAD of the charts when there's no data for the current
-       filter - keeps the canvas elements below untouched, so switching back
-       to a filter WITH data still works (see showChartsEmptyState). -->
-  <p id="chartsEmptyMessage" class="message" style="display: none;"></p>
+    <!-- ── Filters ──────────────────────────────────────────────────────── -->
+    <div class="card filters-card">
+      <div class="filter-group">
+        <label for="dateRangePreset">Date range:</label>
+        <select id="dateRangePreset">
+          <option value="all">All time</option>
+          <option value="today">Today</option>
+          <option value="last7">Last 7 days</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
 
-  <div class="charts-row" id="chartsRow">
-    <div class="card chart-card">
-      <h2>Hot / Warm / Cold split</h2>
-      <div class="chart-box"><canvas id="temperatureChart"></canvas></div>
-      <ul class="chart-legend-list" id="temperatureLegend"></ul>
+      <!-- Only shown when "Custom" is picked above - see showOrHideCustomDates() -->
+      <div class="filter-group" id="customDateGroup" style="display: none;">
+        <input type="date" id="customFrom">
+        <span>to</span>
+        <input type="date" id="customTo">
+      </div>
+
+      <div class="filter-group">
+        <label for="hourFrom">Time of day:</label>
+        <input type="number" id="hourFrom" min="0" max="23" placeholder="hour from">
+        <span>to</span>
+        <input type="number" id="hourTo" min="0" max="23" placeholder="hour to">
+        <span>(leave blank for no filter, e.g. 14 to 16 = 2pm-4pm)</span>
+      </div>
     </div>
 
-    <div class="card chart-card">
-      <h2>Calls by outcome</h2>
-      <div class="chart-box"><canvas id="outcomeChart"></canvas></div>
+    <!-- ── Key metrics ──────────────────────────────────────────────────── -->
+    <div class="metrics-row">
+      <div class="metric-tile">
+        <div class="metric-value" id="metricTotalCalls">-</div>
+        <div class="metric-label">Total calls</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-value" id="metricConnected">-</div>
+        <div class="metric-label">Connected</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-value" id="metricNotConnected">-</div>
+        <div class="metric-label">Not connected</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-value" id="metricPickupRate">-</div>
+        <div class="metric-label">Pick-up rate</div>
+      </div>
+      <div class="metric-tile">
+        <div class="metric-value" id="metricCallbacks">-</div>
+        <div class="metric-label">Call-backs (due now / upcoming)</div>
+      </div>
     </div>
 
-    <div class="card chart-card">
-      <h2>Pick-up rate by hour of day</h2>
-      <div class="chart-box"><canvas id="hourChart"></canvas></div>
+    <!-- ── Charts ───────────────────────────────────────────────────────── -->
+    <!-- Shown INSTEAD of the charts when there's no data for the current
+         filter - keeps the canvas elements below untouched, so switching back
+         to a filter WITH data still works (see showChartsEmptyState). -->
+    <p id="chartsEmptyMessage" class="message" style="display: none;"></p>
+
+    <div class="charts-row" id="chartsRow">
+      <div class="card chart-card">
+        <h2>Hot / Warm / Cold split</h2>
+        <div class="chart-box"><canvas id="temperatureChart"></canvas></div>
+        <ul class="chart-legend-list" id="temperatureLegend"></ul>
+      </div>
+
+      <div class="card chart-card">
+        <h2>Calls by outcome</h2>
+        <div class="chart-box"><canvas id="outcomeChart"></canvas></div>
+      </div>
+
+      <div class="card chart-card">
+        <h2>Pick-up rate by hour of day</h2>
+        <div class="chart-box"><canvas id="hourChart"></canvas></div>
+      </div>
     </div>
   </div>
 
@@ -400,6 +774,7 @@
         if (data.user) {
           signInOverlay.style.display = "none";
           userBarName.textContent = data.user.name || data.user.email;
+          userBarName.classList.add("clickable");
           signOutButton.textContent = "Sign out";
           return true;
         }
@@ -407,6 +782,7 @@
         if (demoMode) {
           signInOverlay.style.display = "none";
           userBarName.textContent = "Demo visitor";
+          userBarName.classList.remove("clickable");
           signOutButton.textContent = "Exit demo";
           return true;
         }
@@ -419,9 +795,176 @@
       }
     }
 
-    signOutButton.addEventListener("click", async () => {
+    // Shared by the standalone Sign out button AND the profile panel's own
+    // Sign out action.
+    async function handleSignOut() {
       await fetch(demoMode ? "/demo/exit" : "/auth/logout", { method: "POST" });
       location.reload();
+    }
+
+    signOutButton.addEventListener("click", handleSignOut);
+
+    // ── Profile panel (real signed-in users only, not demo mode) - see
+    // index.html's copy of this for the full explanation. This page has no
+    // other slide-in panel, so makeSection()/makeSectionTitle() are defined
+    // here too (identical to the other two pages' lead detail panel copies). ──
+    const profilePanelOverlay = document.getElementById("profilePanelOverlay");
+    const profilePanel = document.getElementById("profilePanel");
+    const profilePanelContent = document.getElementById("profilePanelContent");
+    const profilePanelCloseButton = document.getElementById("profilePanelCloseButton");
+
+    function closeProfilePanel() {
+      profilePanel.classList.remove("open");
+      profilePanelOverlay.classList.remove("open");
+    }
+
+    profilePanelCloseButton.addEventListener("click", closeProfilePanel);
+    profilePanelOverlay.addEventListener("click", closeProfilePanel);
+
+    function makeSectionTitle(text) {
+      const title = document.createElement("h3");
+      title.className = "panel-section-title";
+      title.textContent = text;
+      return title;
+    }
+
+    function makeSection(titleText, contentEl) {
+      const section = document.createElement("section");
+      section.className = "panel-section";
+      section.appendChild(makeSectionTitle(titleText));
+      section.appendChild(contentEl);
+      return section;
+    }
+
+    function formatProfilePercent(fraction) {
+      return `${Math.round(fraction * 100)}%`;
+    }
+
+    function renderProfilePanel(profile) {
+      profilePanelContent.innerHTML = "";
+
+      const header = document.createElement("div");
+      header.className = "panel-header";
+
+      if (profile.picture) {
+        const avatar = document.createElement("img");
+        avatar.className = "profile-avatar-large";
+        avatar.src = profile.picture;
+        avatar.alt = "";
+        header.appendChild(avatar);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "profile-avatar-placeholder";
+        placeholder.textContent = (profile.name || profile.email || "?").charAt(0).toUpperCase();
+        header.appendChild(placeholder);
+      }
+
+      const name = document.createElement("h2");
+      name.textContent = profile.name || "(no name)";
+      header.appendChild(name);
+
+      const email = document.createElement("p");
+      email.className = "panel-phone";
+      email.textContent = profile.email;
+      header.appendChild(email);
+
+      profilePanelContent.appendChild(header);
+
+      const companyContainer = document.createElement("div");
+      const companyRow = document.createElement("div");
+      companyRow.className = "company-row";
+
+      const companyInput = document.createElement("input");
+      companyInput.type = "text";
+      companyInput.className = "company-input";
+      companyInput.placeholder = "Add your company/organisation";
+      companyInput.value = profile.company || "";
+      companyRow.appendChild(companyInput);
+
+      const saveCompanyButton = document.createElement("button");
+      saveCompanyButton.className = "call-button";
+      saveCompanyButton.textContent = "Save";
+      companyRow.appendChild(saveCompanyButton);
+
+      companyContainer.appendChild(companyRow);
+
+      const companyStatus = document.createElement("span");
+      companyStatus.className = "call-status";
+      companyContainer.appendChild(companyStatus);
+
+      saveCompanyButton.addEventListener("click", async () => {
+        companyStatus.textContent = "Saving...";
+        try {
+          const response = await fetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ company: companyInput.value }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not save company.");
+          companyStatus.textContent = "Saved.";
+        } catch (error) {
+          companyStatus.textContent = "Error: " + error.message;
+        }
+      });
+
+      profilePanelContent.appendChild(makeSection("Company", companyContainer));
+
+      const statsGrid = document.createElement("div");
+      statsGrid.className = "profile-stats-grid";
+
+      function addStat(value, label) {
+        const tile = document.createElement("div");
+        tile.className = "profile-stat-tile";
+
+        const val = document.createElement("div");
+        val.className = "profile-stat-value";
+        val.textContent = value;
+        tile.appendChild(val);
+
+        const lab = document.createElement("div");
+        lab.className = "profile-stat-label";
+        lab.textContent = label;
+        tile.appendChild(lab);
+
+        statsGrid.appendChild(tile);
+      }
+
+      addStat(profile.stats.totalCalls, "Total calls");
+      addStat(profile.stats.connectedCount, "Connected");
+      addStat(profile.stats.totalCalls > 0 ? formatProfilePercent(profile.stats.pickupRate) : "-", "Pick-up rate");
+      addStat(profile.stats.dealsClosed, "Deals closed");
+
+      profilePanelContent.appendChild(makeSection("All-time stats", statsGrid));
+
+      const signOutRow = document.createElement("div");
+      signOutRow.className = "profile-signout-row";
+      const signOutInPanel = document.createElement("button");
+      signOutInPanel.className = "btn-secondary";
+      signOutInPanel.textContent = "Sign out";
+      signOutInPanel.addEventListener("click", handleSignOut);
+      signOutRow.appendChild(signOutInPanel);
+      profilePanelContent.appendChild(signOutRow);
+    }
+
+    async function openProfilePanel() {
+      profilePanel.classList.add("open");
+      profilePanelOverlay.classList.add("open");
+      profilePanelContent.innerHTML = '<p class="message">Loading...</p>';
+
+      try {
+        const response = await fetch("/api/profile");
+        const profile = await response.json();
+        if (!response.ok) throw new Error(profile.error || "Could not load profile.");
+        renderProfilePanel(profile);
+      } catch (error) {
+        profilePanelContent.textContent = "Couldn't load profile: " + error.message;
+      }
+    }
+
+    userBarName.addEventListener("click", () => {
+      if (demoMode) return;
+      openProfilePanel();
     });
 
     // These hold the three Chart.js chart objects once created, so we can
@@ -434,12 +977,14 @@
     // Colours reused from the SAME Hot/Warm/Cold colours already used
     // everywhere else in the app (the Temperature badge, due-item
     // highlighting) - keeps this dashboard visually consistent with the
-    // rest of Rhythm instead of inventing a new colour scheme.
+    // rest of Rhythm instead of inventing a new colour scheme. Cold is a
+    // grey-teal (not blue) on purpose, so it never blends into the
+    // interface's own interactive blue.
     const TEMPERATURE_COLORS = {
-      hot: "#b42318",
-      warm: "#b45309",
-      cold: "#1d4ed8",
-      unknown: "#8a8f98",
+      hot: "#B23A2E",
+      warm: "#92620A",
+      cold: "#12695F",
+      unknown: "#8A96A3",
     };
 
     // Turns a real Date into a "YYYY-MM-DD" string using LOCAL date parts
@@ -565,7 +1110,7 @@
         type: "bar",
         data: {
           labels,
-          datasets: [{ label: "Calls", data: values, backgroundColor: "#1d4ed8" }],
+          datasets: [{ label: "Calls", data: values, backgroundColor: "#4A90E2" }],
         },
         options: {
           responsive: true,
@@ -590,7 +1135,7 @@
         type: "bar",
         data: {
           labels,
-          datasets: [{ label: "Pick-up rate", data: values, backgroundColor: "#1d4ed8" }],
+          datasets: [{ label: "Pick-up rate", data: values, backgroundColor: "#4A90E2" }],
         },
         options: {
           responsive: true,

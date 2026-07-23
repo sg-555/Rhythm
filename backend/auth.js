@@ -88,6 +88,12 @@ function saveUser(email, tokens, profile) {
   users[email] = {
     email,
     name: profile.name || "",
+    // Google's profile photo URL, shown in the profile menu - null if
+    // Google didn't send one (rare, but not every account has a photo).
+    picture: profile.picture || existing.picture || null,
+    // The rep's own company/organisation, set via POST /api/profile - never
+    // touched here, so re-signing in doesn't erase it.
+    company: existing.company || "",
     accessToken: tokens.access_token,
     // Google only sends a refresh_token the FIRST time you consent (or
     // whenever we force prompt=consent, like we do above) - if THIS sign-in
@@ -105,6 +111,18 @@ function saveUser(email, tokens, profile) {
 // Looks up one user by email. Returns null if we've never seen them.
 function getUser(email) {
   return loadUsers()[email] || null;
+}
+
+// Updates just the company/organisation field for one user (the profile
+// menu's editable field). Returns the updated user, or null if we've never
+// seen this email before.
+function updateUserCompany(email, company) {
+  const users = loadUsers();
+  if (!users[email]) return null;
+
+  users[email].company = company;
+  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  return users[email];
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────
@@ -180,6 +198,7 @@ module.exports = {
   exchangeCodeForUser,
   saveUser,
   getUser,
+  updateUserCompany,
   createSession,
   destroySession,
   readSessionIdFromRequest,

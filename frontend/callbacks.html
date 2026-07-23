@@ -2,30 +2,143 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Rhythm — Call-backs</title>
+  <title>Rhythm.ai — Call-backs</title>
 
   <!-- Twilio's browser calling library (loaded from a CDN, no install needed) -->
   <script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.3/dist/twilio.min.js"></script>
 
+  <!-- Google Fonts: Space Grotesk (display/headings/numbers) + Inter (body/UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <style>
+    /* ── Design tokens - identical set to index.html, so the two pages feel
+       like one consistent product. See index.html for the full rationale. */
+    :root {
+      /* Warm paper backgrounds - not cool grey */
+      --bg-page: #FAF9F7;
+      --bg-subtle: #F0ECE5;
+      --bg-surface: #FFFFFF;
+      --bg-hover: #F5F1EA;
+
+      /* A warm near-black for real contrast, not a mid-grey or a cool slate */
+      --ink: #211D18;
+      --ink-muted: #6E6459;
+      --ink-faint: #948C7F;
+      --border: #E4DFD6;
+      --border-strong: #D2CABC;
+
+      /* Slate blue stays reserved for structure/interactive chrome. */
+      --interactive: #4A90E2;
+      --interactive-hover: #3A7BC8;
+      --interactive-bg: #EAF2FC;
+
+      /* Sage green stays STRICTLY for primary actions/success. */
+      --accent: #2ECC71;
+      --accent-hover: #27AE60;
+      --accent-ink: #1B7943;
+      --accent-bg: #E9F9EF;
+
+      --danger: #E5484D;
+      --danger-hover: #CC3D42;
+      --danger-bg: #FDECEC;
+
+      /* Temperature colours - a touch more saturated than the warm neutral
+         chrome, and distinct from the interactive blue. */
+      --cold-bg: #D8EEEA;
+      --cold-ink: #0E5F55;
+      --warm-bg: #FBE3B8;
+      --warm-ink: #8A5900;
+      --hot-bg: #F8D2CA;
+      --hot-ink: #A32E1F;
+      --none-bg: #EDE8E1;
+      --none-ink: #6E6459;
+
+      /* Typography: Space Grotesk for display/headings/numbers, Inter for
+         body/UI. */
+      --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --text-title: 1.75rem;
+      --text-section: 1.05rem;
+      --text-body: 0.9375rem;
+      --text-meta: 0.8125rem;
+      --text-micro: 0.75rem;
+
+      --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
+      --shadow-panel: -8px 0 32px rgba(33, 29, 24, 0.16);
+      --transition: 160ms ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    :focus-visible {
+      outline: 2px solid var(--interactive);
+      outline-offset: 2px;
+    }
+
     /* Same basic page setup as index.html, so the two pages feel consistent */
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f7f7f9;
-      color: #1f2328;
+      font-family: var(--font-sans);
+      background: var(--bg-page);
+      color: var(--ink);
       margin: 0;
-      padding: 2rem;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page-shell {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: var(--sp-5) var(--sp-6) var(--sp-6);
     }
 
     h1 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
+      font-family: var(--font-display);
+      font-size: var(--text-title);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin: 0 0 var(--sp-2) 0;
+      color: var(--ink);
+    }
+
+    /* Brand wordmark - identical treatment to index.html's, used in the top
+       bar and, larger, on the sign-in screen. */
+    .brand-wordmark {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      text-decoration: none;
+    }
+
+    .brand-wordmark .brand-suffix {
+      color: var(--interactive);
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-5);
     }
 
     .page-subtitle {
-      margin: 0 0 1rem 0;
-      color: #57606a;
+      margin: 0 0 var(--sp-4) 0;
+      color: var(--ink-muted);
       font-size: 0.9rem;
     }
 
@@ -36,59 +149,160 @@
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      border-bottom: 1px solid #e2e2e6;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-5);
+      padding: 0 var(--sp-6);
+      border-bottom: 1px solid var(--border);
     }
 
     /* Clean tab navigation, same on every page (Leads / Call-backs /
        Analytics) - the ONE consistent way to move between pages. */
     .tab-nav {
       display: flex;
-      gap: 0.25rem;
+      gap: var(--sp-1);
     }
 
     .tab-link {
-      padding: 0.6rem 1rem;
+      padding: var(--sp-3) var(--sp-4);
       font-size: 0.9rem;
       font-weight: 600;
-      color: #57606a;
+      color: var(--ink-muted);
       text-decoration: none;
       border-bottom: 2px solid transparent;
+      transition: color var(--transition), border-color var(--transition);
     }
 
     .tab-link:hover {
-      color: #1f2328;
+      color: var(--ink);
     }
 
     .tab-link.active {
-      color: #1d4ed8;
-      border-bottom-color: #1d4ed8;
+      color: var(--ink);
+      border-bottom-color: var(--interactive);
     }
 
     .user-bar {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
-      font-size: 0.85rem;
-      color: #57606a;
-      padding: 0 0.25rem;
+      gap: var(--sp-3);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+      padding: 0 var(--sp-1);
+    }
+
+    /* The signed-in user's name - clickable (opens the profile panel) only
+       for a real signed-in user, not demo mode - see checkSignedIn(). */
+    .user-name-button {
+      font-family: inherit;
+      font-size: inherit;
+      font-weight: 600;
+      color: var(--ink);
+      background: none;
+      border: none;
+      padding: var(--sp-1) var(--sp-2);
+      border-radius: var(--radius-sm);
+      cursor: default;
+    }
+
+    .user-name-button.clickable {
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .user-name-button.clickable:hover {
+      background: var(--bg-hover);
+    }
+
+    /* ── Profile panel - identical to index.html's ─────────────────────── */
+    .profile-avatar-large {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: var(--sp-3);
+    }
+
+    .profile-avatar-placeholder {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--interactive-bg);
+      color: var(--interactive);
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--sp-3);
+    }
+
+    .company-row {
+      display: flex;
+      gap: var(--sp-2);
+      align-items: center;
+    }
+
+    .company-input {
+      flex: 1;
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+    }
+
+    .company-input:focus-visible {
+      border-color: var(--interactive);
+    }
+
+    .profile-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--sp-3);
+    }
+
+    .profile-stat-tile {
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-3);
+    }
+
+    .profile-stat-value {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .profile-stat-label {
+      font-size: var(--text-micro);
+      color: var(--ink-muted);
+      margin-top: var(--sp-1);
+    }
+
+    .profile-signout-row {
+      margin-top: var(--sp-5);
     }
 
     .sign-out-button {
       font-family: inherit;
-      font-size: 0.8rem;
+      font-size: var(--text-meta);
       font-weight: 600;
-      color: #57606a;
-      background: #f0f0f3;
-      border: 1px solid #d8d8dc;
-      border-radius: 6px;
-      padding: 0.3rem 0.7rem;
+      color: var(--ink-muted);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2) var(--sp-3);
       cursor: pointer;
+      transition: background var(--transition), border-color var(--transition);
     }
 
     .sign-out-button:hover {
-      background: #e6e6ea;
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
     }
 
     /* Full-page overlay shown INSTEAD of the app when nobody's signed in. */
@@ -96,158 +310,292 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: #f7f7f9;
+      background: var(--bg-page);
       z-index: 100;
       align-items: center;
       justify-content: center;
     }
 
+    /* The sign-in screen is the first impression - clean, spacious,
+       confident. Same treatment as index.html's. */
     .sign-in-card {
-      background: #ffffff;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      padding: 2.5rem 3rem;
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: 3.5rem 3.5rem;
       text-align: center;
-      max-width: 360px;
+      max-width: 440px;
     }
 
-    .sign-in-card h1 {
-      margin: 0 0 0.5rem 0;
+    .signin-wordmark {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.6rem;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-bottom: var(--sp-5);
     }
 
-    .sign-in-card p {
-      color: #57606a;
-      font-size: 0.95rem;
-      margin: 0 0 1.5rem 0;
+    .signin-wordmark .brand-suffix {
+      color: var(--interactive);
+    }
+
+    .signin-headline {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      color: var(--ink);
+      margin: 0 0 var(--sp-3) 0;
+    }
+
+    .signin-subhead {
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+      line-height: 1.6;
+      margin: 0 0 var(--sp-6) 0;
     }
 
     .google-signin-button {
       display: inline-block;
-      background: #1d4ed8;
+      background: var(--interactive);
       color: #ffffff;
       text-decoration: none;
       font-weight: 600;
       font-size: 0.95rem;
-      padding: 0.6rem 1.25rem;
-      border-radius: 6px;
+      padding: var(--sp-3) var(--sp-6);
+      border-radius: var(--radius-sm);
+      transition: background var(--transition);
     }
 
     .google-signin-button:hover {
-      background: #1739a8;
+      background: var(--interactive-hover);
     }
 
     /* Secondary option on the sign-in card - links straight to GET /demo. */
     .view-demo-button {
       display: inline-block;
-      margin-top: 0.75rem;
-      color: #1d4ed8;
+      margin-top: var(--sp-4);
+      color: var(--ink-muted);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.9rem;
     }
 
     .view-demo-button:hover {
+      color: var(--interactive);
       text-decoration: underline;
     }
 
     /* Always-visible strip while in DEMO MODE - see checkSignedIn(). */
     .demo-banner {
       display: none; /* JS switches this to "block" only in demo mode */
-      background: #fef3c7;
-      color: #92400e;
+      background: var(--warm-bg);
+      color: var(--warm-ink);
       text-align: center;
-      font-size: 0.85rem;
+      font-size: var(--text-meta);
       font-weight: 600;
-      padding: 0.4rem;
+      padding: var(--sp-2);
     }
 
     .device-status {
-      font-size: 0.85rem;
-      color: #57606a;
-      margin-bottom: 1.5rem;
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+      margin: 0 0 var(--sp-5) 0;
     }
 
     .card {
-      background: #ffffff;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      max-width: 800px;
-      padding: 1.25rem 1.5rem;
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      overflow: hidden;
     }
 
     .message {
-      padding: 1.5rem;
-      color: #57606a;
-      font-size: 0.95rem;
+      padding: var(--sp-5);
+      color: var(--ink-muted);
+      font-size: var(--text-body);
     }
 
-    .call-button {
-      font-family: inherit;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #1f2328;
-      background: #f0f0f3;
-      border: 1px solid #d8d8dc;
-      border-radius: 6px;
-      padding: 0.4rem 0.8rem;
-      cursor: pointer;
+    /* Fixed-height, internally scrollable - same idea as index.html's
+       leads table, so this list can never make the page scroll endlessly. */
+    .table-scroll {
+      max-height: 560px;
+      overflow-y: auto;
     }
 
-    .call-button:hover {
-      background: #e6e6ea;
-    }
-
-    /* Shown on every OTHER lead's Call button while a call is active
-       elsewhere - same as index.html. */
-    .call-button:disabled {
-      opacity: 0.6;
-      cursor: default;
-    }
-
-    .call-button:disabled:hover {
-      background: #f0f0f3;
-    }
-
+    /* ── Buttons - identical component system to index.html ────────────── */
+    .call-button,
+    .btn-secondary,
+    .accept-button,
     .hangup-button {
       font-family: inherit;
       font-size: 0.85rem;
       font-weight: 600;
-      color: #ffffff;
-      background: #d92d20;
-      border: 1px solid #d92d20;
-      border-radius: 6px;
-      padding: 0.4rem 0.8rem;
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2) var(--sp-4);
       cursor: pointer;
+      border: 1px solid transparent;
+      transition: background var(--transition), border-color var(--transition), color var(--transition), opacity var(--transition);
+    }
+
+    /* PRIMARY - sage green (Call, both Save buttons, Send). */
+    .call-button {
+      color: #ffffff;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .call-button:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .call-button:disabled {
+      opacity: 1;
+      background: var(--bg-subtle);
+      border-color: var(--border);
+      color: var(--ink-faint);
+      cursor: default;
+    }
+
+    .call-button:disabled:hover {
+      background: var(--bg-subtle);
+    }
+
+    /* SECONDARY - quiet (Draft with AI, Clear, spacing-suggestion buttons). */
+    .btn-secondary {
+      color: var(--ink);
+      background: var(--bg-surface);
+      border-color: var(--border-strong);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
+    }
+
+    .btn-secondary:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    /* PRIMARY - "Accept" is one of the four named primary actions. */
+    .accept-button {
+      color: #ffffff;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .accept-button:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+
+    .accept-button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    /* DANGER - "Hang Up", a different red than the Hot badge on purpose. */
+    .hangup-button {
+      color: #ffffff;
+      background: var(--danger);
+      border-color: var(--danger);
     }
 
     .hangup-button:hover {
-      background: #b42318;
+      background: var(--danger-hover);
+      border-color: var(--danger-hover);
     }
 
     .call-status {
-      margin-left: 0.6rem;
-      font-size: 0.85rem;
-      color: #57606a;
+      margin-left: var(--sp-2);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
     }
 
-    /* The coloured Cold/Warm/Hot temperature badge - same as index.html */
+    /* ── Pagination - identical component to index.html's ──────────────── */
+    .pagination-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+      padding: var(--sp-3) var(--sp-4);
+      border-top: 1px solid var(--bg-subtle);
+      background: var(--bg-surface);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+    }
+
+    .pagination-rows-per-page {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+
+    .pagination-rows-per-page select {
+      font-family: inherit;
+      font-size: var(--text-meta);
+      padding: var(--sp-1) var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      color: var(--ink);
+    }
+
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+    }
+
+    .pagination-controls button {
+      font-family: inherit;
+      font-size: var(--text-meta);
+      font-weight: 600;
+      color: var(--ink);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-1) var(--sp-3);
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .pagination-controls button:hover:not(:disabled) {
+      background: var(--bg-hover);
+    }
+
+    .pagination-controls button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    /* The coloured Cold/Warm/Hot temperature badge - same as index.html,
+       distinct from the interactive blue chrome on purpose. */
     .temp-badge {
+      font-family: var(--font-display);
       display: inline-block;
-      padding: 0.3rem 0.75rem;
+      padding: var(--sp-1) var(--sp-3);
       border-radius: 999px;
       font-size: 0.85rem;
-      font-weight: 600;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
 
-    .temp-cold { background: #eaf2ff; color: #1d4ed8; }
-    .temp-warm { background: #fff4e5; color: #b45309; }
-    .temp-hot { background: #fdecea; color: #b42318; }
-    .temp-none { background: #f0f0f3; color: #57606a; }
+    .temp-cold { background: var(--cold-bg); color: var(--cold-ink); }
+    .temp-warm { background: var(--warm-bg); color: var(--warm-ink); }
+    .temp-hot { background: var(--hot-bg); color: var(--hot-ink); }
+    .temp-none { background: var(--none-bg); color: var(--none-ink); }
 
     .callback-list {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: var(--sp-3);
+      padding: var(--sp-4);
     }
 
     /* One call-back: name/phone/temperature/reason/stage/notes on the left,
@@ -258,40 +606,49 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 1rem;
-      padding: 0.75rem 0.9rem;
-      background: #f7f7f9;
-      border-left: 3px solid #d8d8dc;
-      border-radius: 6px;
+      gap: var(--sp-4);
+      padding: var(--sp-3) var(--sp-4);
+      background: var(--bg-page);
+      border-left: 3px solid var(--border-strong);
+      border-radius: var(--radius-sm);
       cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .callback-item:hover {
+      background: var(--bg-hover);
     }
 
     /* Highlighted: this one is due now, OR its call-back time is within the
        hour - amber, same "needs attention soon" colour used everywhere else
        in the app (never red/alarm-coloured - see the calm-tone rule). */
     .callback-item.highlighted {
-      background: #fff4e5;
-      border-left-color: #b45309;
+      background: var(--warm-bg);
+      border-left-color: var(--warm-ink);
+    }
+
+    .callback-item.highlighted:hover {
+      background: #fbe6b8;
     }
 
     .callback-item-info {
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
+      gap: var(--sp-1);
     }
 
     .callback-reason {
       margin: 0;
-      font-size: 0.85rem;
-      color: #57606a;
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
     }
 
     /* Small "Stage: ... / Notes: ..." preview line - the same info the main
        leads table shows, so this page isn't a stripped-down view. */
     .callback-item-details {
       margin: 0;
-      font-size: 0.8rem;
-      color: #8a8f98;
+      font-size: var(--text-micro);
+      color: var(--ink-faint);
     }
 
     /* Dark overlay behind the side panel - clicking it closes the panel */
@@ -299,7 +656,7 @@
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.25);
+      background: rgba(44, 62, 80, 0.35);
       z-index: 10;
     }
 
@@ -317,12 +674,12 @@
       width: 440px;
       max-width: 90vw;
       height: 100vh;
-      background: #ffffff;
-      box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-panel);
       z-index: 11;
       overflow-y: auto;
       box-sizing: border-box;
-      transition: right 0.2s ease;
+      transition: right var(--transition);
     }
 
     .lead-panel.open {
@@ -331,111 +688,97 @@
 
     .panel-close-button {
       position: absolute;
-      top: 1rem;
-      right: 1rem;
+      top: var(--sp-4);
+      right: var(--sp-4);
       border: none;
       background: none;
       font-size: 1.3rem;
       line-height: 1;
       cursor: pointer;
-      color: #57606a;
+      color: var(--ink-muted);
     }
 
     .panel-content {
-      padding: 1.5rem;
+      padding: var(--sp-5);
     }
 
     .panel-header h2 {
-      margin: 0 0 0.25rem 0;
+      margin: 0 0 var(--sp-1) 0;
       font-size: 1.25rem;
+      color: var(--ink);
     }
 
     .panel-phone {
-      margin: 0 0 0.75rem 0;
-      color: #57606a;
-      font-size: 0.9rem;
+      margin: 0 0 var(--sp-3) 0;
+      color: var(--ink-muted);
+      font-size: var(--text-body);
     }
 
     .panel-section {
-      padding: 1rem 0;
+      padding: var(--sp-4) 0;
     }
 
     .panel-section + .panel-section {
-      border-top: 1px solid #eeeeef;
+      border-top: 1px solid var(--bg-subtle);
     }
 
     .panel-section-title {
-      margin: 0 0 0.5rem 0;
-      font-size: 0.8rem;
+      font-family: var(--font-display);
+      margin: 0 0 var(--sp-2) 0;
+      font-size: var(--text-micro);
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.03em;
-      color: #57606a;
+      letter-spacing: 0.04em;
+      color: var(--ink-muted);
     }
 
     .call-stats-strip {
-      margin: 0.25rem 0 0 0;
-      font-size: 0.78rem;
-      color: #8a8f98;
+      margin: var(--sp-1) 0 0 0;
+      font-size: var(--text-micro);
+      color: var(--ink-faint);
+      font-variant-numeric: tabular-nums;
     }
 
     .ai-note-line {
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 var(--sp-2) 0;
       font-size: 0.9rem;
-      line-height: 1.4;
+      line-height: 1.6;
+      max-width: 60ch;
     }
 
     .ai-note-line strong {
       font-weight: 600;
+      color: var(--ink);
     }
 
     .ai-headline {
-      margin: 0 0 0.6rem 0;
+      margin: 0 0 var(--sp-3) 0;
       font-size: 0.95rem;
       font-weight: 500;
       font-style: italic;
-      color: #57606a;
+      color: var(--ink-muted);
+      line-height: 1.5;
     }
 
     .previous-calls-text {
       margin: 0;
       font-size: 0.9rem;
-      line-height: 1.5;
-      color: #1f2328;
+      line-height: 1.65;
+      color: var(--ink);
+      max-width: 62ch;
       white-space: pre-wrap;
     }
 
     .current-stage-line {
       font-size: 0.9rem;
-      margin: 0 0 0.5rem 0;
+      margin: 0 0 var(--sp-2) 0;
     }
 
     .suggested-stage-row {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
+      gap: var(--sp-2);
       font-size: 0.9rem;
-    }
-
-    .accept-button {
-      font-family: inherit;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #ffffff;
-      background: #1d4ed8;
-      border: 1px solid #1d4ed8;
-      border-radius: 6px;
-      padding: 0.35rem 0.7rem;
-      cursor: pointer;
-    }
-
-    .accept-button:hover {
-      background: #1739a8;
-    }
-
-    .accept-button:disabled {
-      opacity: 0.6;
-      cursor: default;
     }
 
     .notes-textarea {
@@ -443,30 +786,37 @@
       min-height: 100px;
       font-family: inherit;
       font-size: 0.9rem;
-      padding: 0.6rem;
-      border: 1px solid #d8d8dc;
-      border-radius: 6px;
+      line-height: 1.5;
+      padding: var(--sp-3);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
       box-sizing: border-box;
       resize: vertical;
+      color: var(--ink);
+    }
+
+    .notes-textarea:focus-visible {
+      border-color: var(--interactive);
     }
 
     .save-button {
-      margin-top: 0.6rem;
+      margin-top: var(--sp-2);
     }
 
     .callback-row {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: var(--sp-2);
       flex-wrap: wrap;
     }
 
     .callback-row input[type="datetime-local"] {
       font-family: inherit;
-      font-size: 0.85rem;
-      padding: 0.35rem 0.5rem;
-      border: 1px solid #d8d8dc;
-      border-radius: 6px;
+      font-size: var(--text-meta);
+      padding: var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
     }
 
     /* Gentle "that's close to another call-back" suggestion - calm blue,
@@ -475,11 +825,11 @@
       display: none;
       align-items: center;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 0.5rem;
-      padding: 0.5rem 0.75rem;
-      background: #eef2ff;
-      border-radius: 6px;
+      gap: var(--sp-2);
+      margin-top: var(--sp-2);
+      padding: var(--sp-2) var(--sp-3);
+      background: var(--interactive-bg);
+      border-radius: var(--radius-sm);
       font-size: 0.85rem;
     }
   </style>
@@ -489,37 +839,72 @@
        see checkSignedIn(). -->
   <div id="signInOverlay" class="sign-in-overlay">
     <div class="sign-in-card">
-      <h1>Rhythm</h1>
-      <p>Sign in with your Google account to manage your leads.</p>
+      <div class="signin-wordmark">Rhythm<span class="brand-suffix">.ai</span></div>
+      <h1 class="signin-headline">Find your rhythm. Close more.</h1>
+      <p class="signin-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
       <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
       <br />
-      <a href="/demo" class="view-demo-button">View Demo (no sign-in needed)</a>
+      <a href="/demo" class="view-demo-button">View Demo</a>
     </div>
   </div>
 
   <!-- Always-visible while in demo mode - see checkSignedIn(). -->
   <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
-  <!-- Same top bar on every page. This page marks "Call-backs" as active. -->
+  <!-- Same top bar on every page. This page marks "Call-backs" as active.
+       Sits outside .page-shell so it spans the full browser width. -->
   <div class="top-bar">
-    <nav class="tab-nav">
-      <a href="index.html" class="tab-link">Leads</a>
-      <a href="callbacks.html" class="tab-link active">Call-backs</a>
-      <a href="analytics.html" class="tab-link">Analytics</a>
-    </nav>
+    <div class="top-bar-left">
+      <span class="brand-wordmark">Rhythm<span class="brand-suffix">.ai</span></span>
+      <nav class="tab-nav">
+        <a href="index.html" class="tab-link">Leads</a>
+        <a href="callbacks.html" class="tab-link active">Call-backs</a>
+        <a href="analytics.html" class="tab-link">Analytics</a>
+      </nav>
+    </div>
     <div class="user-bar">
-      <span id="userBarName"></span>
+      <button id="userBarName" type="button" class="user-name-button"></button>
       <button id="signOutButton" class="sign-out-button">Sign out</button>
     </div>
   </div>
 
-  <h1>Call-backs</h1>
-  <p class="page-subtitle">Everything due now, plus everything upcoming - soonest/most-overdue first.</p>
-  <p id="deviceStatus" class="device-status">Setting up calling...</p>
+  <!-- Profile panel - identical to index.html's. -->
+  <div id="profilePanelOverlay" class="panel-overlay"></div>
+  <div id="profilePanel" class="lead-panel">
+    <button id="profilePanelCloseButton" class="panel-close-button" aria-label="Close">×</button>
+    <div id="profilePanelContent" class="panel-content"></div>
+  </div>
 
-  <div class="card">
-    <!-- We fill this container with the combined list, or a friendly message -->
-    <div id="callbacksContainer" class="message">Loading...</div>
+  <div class="page-shell">
+    <h1>Call-backs</h1>
+    <p class="page-subtitle">Everything due now, plus everything upcoming - soonest/most-overdue first.</p>
+    <p id="deviceStatus" class="device-status">Setting up calling...</p>
+
+    <div class="card">
+      <!-- Fixed-height, internally scrollable - same idea as the main
+           leads table, so this list can never make the page scroll
+           endlessly. We fill this container with the combined list, or a
+           friendly message. -->
+      <div class="table-scroll">
+        <div id="callbacksContainer" class="message">Loading...</div>
+      </div>
+      <div class="pagination-bar">
+        <div class="pagination-rows-per-page">
+          <label for="callbacksRowsPerPage">Rows per page:</label>
+          <select id="callbacksRowsPerPage">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <span id="callbacksPaginationInfo"></span>
+        <div class="pagination-controls">
+          <button id="callbacksPrevPage" type="button">Prev</button>
+          <button id="callbacksNextPage" type="button">Next</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Lead detail side panel - identical to index.html's, so clicking a due
@@ -534,6 +919,19 @@
   <script>
     const callbacksContainer = document.getElementById("callbacksContainer");
     const deviceStatus = document.getElementById("deviceStatus");
+
+    // ── Call-backs list pagination ───────────────────────────────────────
+    // Purely a display concern - loadCallbacksList() still fetches/combines/
+    // sorts the FULL due+upcoming list exactly as before; this just slices
+    // it into pages before drawing rows into #callbacksContainer.
+    const callbacksRowsPerPageSelect = document.getElementById("callbacksRowsPerPage");
+    const callbacksPaginationInfo = document.getElementById("callbacksPaginationInfo");
+    const callbacksPrevPageButton = document.getElementById("callbacksPrevPage");
+    const callbacksNextPageButton = document.getElementById("callbacksNextPage");
+
+    let callbacksPageSize = parseInt(callbacksRowsPerPageSelect.value, 10);
+    let callbacksCurrentPage = 1;
+    let callbacksAllEntries = []; // the full, already-sorted due+upcoming list
 
     // ── Sign-in gate ─────────────────────────────────────────────────────
     // Same pattern on every page - see index.html's copy of this for the
@@ -558,6 +956,7 @@
         if (data.user) {
           signInOverlay.style.display = "none";
           userBarName.textContent = data.user.name || data.user.email;
+          userBarName.classList.add("clickable");
           signOutButton.textContent = "Sign out";
           return true;
         }
@@ -565,6 +964,7 @@
         if (demoMode) {
           signInOverlay.style.display = "none";
           userBarName.textContent = "Demo visitor";
+          userBarName.classList.remove("clickable");
           signOutButton.textContent = "Exit demo";
           return true;
         }
@@ -577,9 +977,159 @@
       }
     }
 
-    signOutButton.addEventListener("click", async () => {
+    // Shared by the standalone Sign out button AND the profile panel's own
+    // Sign out action.
+    async function handleSignOut() {
       await fetch(demoMode ? "/demo/exit" : "/auth/logout", { method: "POST" });
       location.reload();
+    }
+
+    signOutButton.addEventListener("click", handleSignOut);
+
+    // ── Profile panel (real signed-in users only, not demo mode) - see
+    // index.html's copy of this for the full explanation. ────────────────
+    const profilePanelOverlay = document.getElementById("profilePanelOverlay");
+    const profilePanel = document.getElementById("profilePanel");
+    const profilePanelContent = document.getElementById("profilePanelContent");
+    const profilePanelCloseButton = document.getElementById("profilePanelCloseButton");
+
+    function closeProfilePanel() {
+      profilePanel.classList.remove("open");
+      profilePanelOverlay.classList.remove("open");
+    }
+
+    profilePanelCloseButton.addEventListener("click", closeProfilePanel);
+    profilePanelOverlay.addEventListener("click", closeProfilePanel);
+
+    function formatProfilePercent(fraction) {
+      return `${Math.round(fraction * 100)}%`;
+    }
+
+    function renderProfilePanel(profile) {
+      profilePanelContent.innerHTML = "";
+
+      const header = document.createElement("div");
+      header.className = "panel-header";
+
+      if (profile.picture) {
+        const avatar = document.createElement("img");
+        avatar.className = "profile-avatar-large";
+        avatar.src = profile.picture;
+        avatar.alt = "";
+        header.appendChild(avatar);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "profile-avatar-placeholder";
+        placeholder.textContent = (profile.name || profile.email || "?").charAt(0).toUpperCase();
+        header.appendChild(placeholder);
+      }
+
+      const name = document.createElement("h2");
+      name.textContent = profile.name || "(no name)";
+      header.appendChild(name);
+
+      const email = document.createElement("p");
+      email.className = "panel-phone";
+      email.textContent = profile.email;
+      header.appendChild(email);
+
+      profilePanelContent.appendChild(header);
+
+      const companyContainer = document.createElement("div");
+      const companyRow = document.createElement("div");
+      companyRow.className = "company-row";
+
+      const companyInput = document.createElement("input");
+      companyInput.type = "text";
+      companyInput.className = "company-input";
+      companyInput.placeholder = "Add your company/organisation";
+      companyInput.value = profile.company || "";
+      companyRow.appendChild(companyInput);
+
+      const saveCompanyButton = document.createElement("button");
+      saveCompanyButton.className = "call-button";
+      saveCompanyButton.textContent = "Save";
+      companyRow.appendChild(saveCompanyButton);
+
+      companyContainer.appendChild(companyRow);
+
+      const companyStatus = document.createElement("span");
+      companyStatus.className = "call-status";
+      companyContainer.appendChild(companyStatus);
+
+      saveCompanyButton.addEventListener("click", async () => {
+        companyStatus.textContent = "Saving...";
+        try {
+          const response = await fetch("/api/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ company: companyInput.value }),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not save company.");
+          companyStatus.textContent = "Saved.";
+        } catch (error) {
+          companyStatus.textContent = "Error: " + error.message;
+        }
+      });
+
+      profilePanelContent.appendChild(makeSection("Company", companyContainer));
+
+      const statsGrid = document.createElement("div");
+      statsGrid.className = "profile-stats-grid";
+
+      function addStat(value, label) {
+        const tile = document.createElement("div");
+        tile.className = "profile-stat-tile";
+
+        const val = document.createElement("div");
+        val.className = "profile-stat-value";
+        val.textContent = value;
+        tile.appendChild(val);
+
+        const lab = document.createElement("div");
+        lab.className = "profile-stat-label";
+        lab.textContent = label;
+        tile.appendChild(lab);
+
+        statsGrid.appendChild(tile);
+      }
+
+      addStat(profile.stats.totalCalls, "Total calls");
+      addStat(profile.stats.connectedCount, "Connected");
+      addStat(profile.stats.totalCalls > 0 ? formatProfilePercent(profile.stats.pickupRate) : "-", "Pick-up rate");
+      addStat(profile.stats.dealsClosed, "Deals closed");
+
+      profilePanelContent.appendChild(makeSection("All-time stats", statsGrid));
+
+      const signOutRow = document.createElement("div");
+      signOutRow.className = "profile-signout-row";
+      const signOutInPanel = document.createElement("button");
+      signOutInPanel.className = "btn-secondary";
+      signOutInPanel.textContent = "Sign out";
+      signOutInPanel.addEventListener("click", handleSignOut);
+      signOutRow.appendChild(signOutInPanel);
+      profilePanelContent.appendChild(signOutRow);
+    }
+
+    async function openProfilePanel() {
+      profilePanel.classList.add("open");
+      profilePanelOverlay.classList.add("open");
+      profilePanelContent.innerHTML = '<p class="message">Loading...</p>';
+
+      try {
+        const response = await fetch("/api/profile");
+        const profile = await response.json();
+        if (!response.ok) throw new Error(profile.error || "Could not load profile.");
+        renderProfilePanel(profile);
+      } catch (error) {
+        profilePanelContent.textContent = "Couldn't load profile: " + error.message;
+      }
+    }
+
+    userBarName.addEventListener("click", () => {
+      if (demoMode) return;
+      openProfilePanel();
     });
 
     // Call-backs must be spaced at least this many minutes apart - same
@@ -1126,7 +1676,7 @@
       row.appendChild(saveButton);
 
       const clearButton = document.createElement("button");
-      clearButton.className = "call-button";
+      clearButton.className = "btn-secondary";
       clearButton.textContent = "Clear";
       row.appendChild(clearButton);
 
@@ -1170,12 +1720,12 @@
         suggestion.appendChild(text);
 
         const useSuggestedButton = document.createElement("button");
-        useSuggestedButton.className = "call-button";
+        useSuggestedButton.className = "btn-secondary";
         useSuggestedButton.textContent = "Use this time";
         suggestion.appendChild(useSuggestedButton);
 
         const keepOriginalButton = document.createElement("button");
-        keepOriginalButton.className = "call-button";
+        keepOriginalButton.className = "btn-secondary";
         keepOriginalButton.textContent = "Keep my time";
         suggestion.appendChild(keepOriginalButton);
 
@@ -1249,7 +1799,7 @@
       buttonRow.className = "callback-row";
 
       const draftButton = document.createElement("button");
-      draftButton.className = "call-button";
+      draftButton.className = "btn-secondary";
       draftButton.textContent = "Draft with AI";
       buttonRow.appendChild(draftButton);
 
@@ -1476,11 +2026,74 @@
       }
     }
 
+    // Updates the "Rows X-Y of Z" text and enables/disables Prev/Next to
+    // match the current page - called every time the list (re)renders.
+    function updateCallbacksPaginationBar(totalItems) {
+      const totalPages = Math.max(1, Math.ceil(totalItems / callbacksPageSize));
+      callbacksCurrentPage = Math.min(callbacksCurrentPage, totalPages);
+
+      if (totalItems === 0) {
+        callbacksPaginationInfo.textContent = "No rows";
+      } else {
+        const start = (callbacksCurrentPage - 1) * callbacksPageSize + 1;
+        const end = Math.min(callbacksCurrentPage * callbacksPageSize, totalItems);
+        callbacksPaginationInfo.textContent = `Rows ${start}-${end} of ${totalItems}`;
+      }
+
+      callbacksPrevPageButton.disabled = callbacksCurrentPage <= 1;
+      callbacksNextPageButton.disabled = callbacksCurrentPage >= totalPages;
+    }
+
+    // Draws whichever page of callbacksAllEntries is currently selected into
+    // #callbacksContainer. Always clears and rebuilds the SAME container
+    // element (never replaces it), so this can safely be called again every
+    // time the page or rows-per-page changes.
+    function renderCallbacksPage() {
+      updateCallbacksPaginationBar(callbacksAllEntries.length);
+
+      callbacksContainer.innerHTML = "";
+
+      if (callbacksAllEntries.length === 0) {
+        callbacksContainer.textContent = "No call-backs due or scheduled right now.";
+        return;
+      }
+
+      const pageStart = (callbacksCurrentPage - 1) * callbacksPageSize;
+      const pageEntries = callbacksAllEntries.slice(pageStart, pageStart + callbacksPageSize);
+
+      const list = document.createElement("div");
+      list.className = "callback-list";
+      pageEntries.forEach((entry) => list.appendChild(createCallbackItem(entry)));
+      callbacksContainer.appendChild(list);
+    }
+
+    callbacksRowsPerPageSelect.addEventListener("change", () => {
+      callbacksPageSize = parseInt(callbacksRowsPerPageSelect.value, 10);
+      callbacksCurrentPage = 1;
+      renderCallbacksPage();
+    });
+
+    callbacksPrevPageButton.addEventListener("click", () => {
+      if (callbacksCurrentPage > 1) {
+        callbacksCurrentPage--;
+        renderCallbacksPage();
+      }
+    });
+
+    callbacksNextPageButton.addEventListener("click", () => {
+      const totalPages = Math.max(1, Math.ceil(callbacksAllEntries.length / callbacksPageSize));
+      if (callbacksCurrentPage < totalPages) {
+        callbacksCurrentPage++;
+        renderCallbacksPage();
+      }
+    });
+
     // Fetches the due list, combines it with the upcoming list (computed
-    // from allLeads), and renders ONE chronological list: due leads first
+    // from allLeads), and stores ONE chronological list: due leads first
     // (already sorted most-overdue-first by the backend), then upcoming
     // leads (soonest-first) - reading top to bottom as "most urgent first,
     // then what's coming up next." This is this page's whole purpose.
+    // Rendering itself (and pagination) is handled by renderCallbacksPage().
     async function loadCallbacksList() {
       try {
         const response = await fetch("/api/leads/due");
@@ -1509,18 +2122,8 @@
           highlighted: item.callBackDate - new Date() <= REMINDER_WINDOW_MS,
         }));
 
-        const allEntries = dueEntries.concat(upcomingEntries);
-
-        if (allEntries.length === 0) {
-          callbacksContainer.textContent = "No call-backs due or scheduled right now.";
-          return;
-        }
-
-        const list = document.createElement("div");
-        list.className = "callback-list";
-        allEntries.forEach((entry) => list.appendChild(createCallbackItem(entry)));
-
-        callbacksContainer.replaceWith(list);
+        callbacksAllEntries = dueEntries.concat(upcomingEntries);
+        renderCallbacksPage();
       } catch (error) {
         callbacksContainer.textContent = "Couldn't load call-backs right now. Please check the server and try again.";
       }

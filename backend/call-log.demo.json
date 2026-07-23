@@ -1,0 +1,3683 @@
+[
+  {
+    "timestamp": "2026-06-24T03:52:39.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 138,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-24T06:19:38.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 57,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-06-24T06:48:07.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 29,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-24T07:16:20.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 33,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-24T07:33:34.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-24T08:48:05.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-24T08:58:45.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 291,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-24T09:15:07.000Z",
+    "phone": "919484559215",
+    "name": "Neha Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-24T09:21:04.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-24T09:29:41.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 367,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-24T09:56:19.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-24T10:10:58.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-24T10:43:53.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-24T12:51:43.000Z",
+    "phone": "919288843998",
+    "name": "Reyansh Iyer",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 47,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-24T15:51:35.000Z",
+    "phone": "919465145420",
+    "name": "Kavya Kapoor",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-25T03:01:59.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-25T03:56:56.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-25T04:34:03.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 79,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-25T04:45:07.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-06-25T05:04:38.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 326,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-25T05:10:08.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 53,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-25T07:20:24.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-06-25T08:11:57.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-25T08:42:01.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 81,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-25T10:40:39.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 404,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-25T10:45:44.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-25T10:49:59.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-25T11:13:38.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 428,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-25T11:24:08.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 350,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-25T11:34:35.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-25T14:55:52.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-26T03:53:03.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-26T05:45:24.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-26T05:48:13.000Z",
+    "phone": "919383427819",
+    "name": "Nikhil Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-26T07:16:31.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-26T07:24:16.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 573,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-26T07:32:40.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-26T08:08:01.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 87,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-26T08:29:15.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 166,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-26T08:40:26.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-26T09:40:52.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-26T11:36:15.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 558,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-06-26T12:19:50.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-27T04:28:37.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-27T11:03:12.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-27T13:35:52.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 223,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-28T10:12:15.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-28T13:20:28.000Z",
+    "phone": "919646371111",
+    "name": "Kavya Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-29T02:06:38.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-29T03:57:28.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 236,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-29T04:27:32.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-29T04:37:48.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 586,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-29T04:57:19.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 44,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-29T05:34:04.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 14,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-29T07:49:36.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 45,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-29T08:08:45.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-29T08:55:36.000Z",
+    "phone": "919593597222",
+    "name": "Riya Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-29T09:18:56.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-29T09:34:23.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 183,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-29T10:00:22.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-29T10:22:52.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-06-29T10:29:51.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-29T11:13:28.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 443,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-29T11:20:11.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-29T12:04:47.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 532,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-29T13:45:25.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-06-30T03:02:07.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-30T03:20:57.000Z",
+    "phone": "919386601799",
+    "name": "Vivaan Bhatia",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 599,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-30T03:34:43.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 226,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-30T03:49:23.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T03:50:18.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-30T04:34:13.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-06-30T05:49:17.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-30T05:58:15.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 418,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-30T06:50:08.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T07:43:09.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 338,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-06-30T08:15:12.000Z",
+    "phone": "919592196001",
+    "name": "Pooja Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-30T08:34:01.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-30T09:24:35.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T09:28:20.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 38,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-06-30T09:39:24.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T11:01:15.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-06-30T11:22:03.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T11:36:15.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T12:00:31.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T12:48:16.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T13:32:07.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-06-30T13:53:48.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-01T03:05:15.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-01T04:26:34.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-01T04:43:14.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 21,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-01T04:58:37.000Z",
+    "phone": "919571508627",
+    "name": "Myra Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 346,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-01T05:26:15.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 265,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-01T05:35:52.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-01T07:43:01.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-01T08:22:46.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-01T08:31:02.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 550,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-01T09:41:06.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-01T12:14:41.000Z",
+    "phone": "919646371111",
+    "name": "Kavya Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 367,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-01T15:58:01.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-01T16:09:46.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-02T02:51:36.000Z",
+    "phone": "919995553873",
+    "name": "Priya Malhotra",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-02T04:23:03.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-02T04:27:41.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-02T04:32:00.000Z",
+    "phone": "919532629433",
+    "name": "Kabir Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 41,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-02T06:05:25.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 347,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-02T06:27:37.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-02T08:10:57.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 190,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-02T09:43:16.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-02T09:50:57.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-02T09:57:56.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 249,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-02T10:24:28.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 58,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-02T11:53:26.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 33,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-02T12:00:56.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-02T12:09:55.000Z",
+    "phone": "919646371111",
+    "name": "Kavya Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 50,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-02T12:19:12.000Z",
+    "phone": "919484559215",
+    "name": "Neha Sharma",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-02T12:22:35.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 35,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-02T13:23:09.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-02T13:23:20.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-03T02:49:31.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-03T04:00:57.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-03T04:39:41.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-03T06:11:56.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-03T06:12:57.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-03T08:55:28.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-03T09:12:30.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-03T11:51:43.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 50,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-03T11:54:25.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 26,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-03T12:51:34.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-03T13:15:48.000Z",
+    "phone": "919465145420",
+    "name": "Kavya Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 248,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-04T06:07:48.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 543,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-04T07:22:19.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-04T08:41:59.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-04T08:47:40.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 26,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-04T09:16:10.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-04T10:40:57.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-04T11:35:33.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-04T13:09:57.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 356,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-05T03:12:44.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-05T08:30:37.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 333,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-05T10:56:59.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 374,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-05T14:46:27.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-05T14:55:39.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T04:20:40.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-06T04:34:50.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T05:18:59.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 442,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-06T05:32:08.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 68,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-06T05:53:56.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-06T06:17:14.000Z",
+    "phone": "919532629433",
+    "name": "Kabir Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 206,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T06:44:59.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-06T06:49:16.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 211,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-06T07:29:08.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T08:07:42.000Z",
+    "phone": "919465145420",
+    "name": "Kavya Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 29,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T08:31:46.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-06T09:22:59.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-06T09:26:46.000Z",
+    "phone": "919383427819",
+    "name": "Nikhil Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 48,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T10:25:52.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 39,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-06T10:34:19.000Z",
+    "phone": "919470927606",
+    "name": "Saanvi Joshi",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-06T11:08:28.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-06T11:25:01.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-06T11:38:28.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-06T12:12:22.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-06T12:13:16.000Z",
+    "phone": "919484559215",
+    "name": "Neha Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 173,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T02:16:32.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 18,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T02:18:26.000Z",
+    "phone": "919386601799",
+    "name": "Vivaan Bhatia",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-07T05:19:27.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 189,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-07T05:24:17.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 19,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-07T05:27:13.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-07T05:30:43.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 26,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-07T06:32:33.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 72,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-07T06:57:09.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 183,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-07T06:59:42.000Z",
+    "phone": "919465145420",
+    "name": "Kavya Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-07T08:32:34.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-07T08:56:21.000Z",
+    "phone": "919592196001",
+    "name": "Pooja Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 361,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T09:41:37.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 547,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T09:50:01.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 69,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T10:04:36.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 60,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-07T10:10:48.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 78,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-07T10:23:49.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T10:32:13.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-07T10:50:50.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-07T11:14:17.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-07T11:58:19.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-07T12:20:32.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-07T12:40:41.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-07T13:03:26.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-07T13:27:49.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 571,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-08T01:52:17.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-08T04:18:52.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 478,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-08T04:21:12.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-08T04:27:09.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 18,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-08T04:58:35.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-08T05:44:37.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-08T06:51:45.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-08T07:11:12.000Z",
+    "phone": "919532629433",
+    "name": "Kabir Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 469,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-08T07:40:16.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-08T07:54:02.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-08T08:04:43.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-08T08:22:51.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-08T08:45:21.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 79,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-08T08:51:40.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 89,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-08T09:37:40.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-08T09:58:47.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 222,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-08T11:14:48.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-08T11:16:58.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-08T11:37:08.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-09T02:25:25.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-09T02:35:10.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-09T03:49:32.000Z",
+    "phone": "919470927606",
+    "name": "Saanvi Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 294,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-09T03:54:44.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 254,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T04:52:18.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 15,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-09T05:46:40.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T05:50:19.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 539,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T06:44:38.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 406,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T07:03:40.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 447,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-09T08:48:27.000Z",
+    "phone": "919646371111",
+    "name": "Kavya Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 43,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-09T08:57:31.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-09T09:06:19.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 567,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T09:42:30.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-09T09:42:35.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-09T09:51:05.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T10:02:54.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 267,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-09T10:10:41.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 290,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-09T10:21:15.000Z",
+    "phone": "919484559215",
+    "name": "Neha Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 80,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-09T11:04:02.000Z",
+    "phone": "919646371111",
+    "name": "Kavya Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 32,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-09T12:51:40.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-09T12:57:39.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-09T14:29:27.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-10T02:36:15.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-10T03:08:09.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 581,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-10T03:25:14.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 53,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-10T03:54:08.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-10T05:22:25.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-10T05:40:07.000Z",
+    "phone": "919465145420",
+    "name": "Kavya Kapoor",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-10T06:34:51.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-10T06:51:42.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 320,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-10T07:37:00.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-10T09:37:18.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 86,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-10T10:30:45.000Z",
+    "phone": "919484559215",
+    "name": "Neha Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-10T11:06:02.000Z",
+    "phone": "919592196001",
+    "name": "Pooja Agarwal",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-10T11:43:54.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 29,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-10T12:06:06.000Z",
+    "phone": "919592196001",
+    "name": "Pooja Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 101,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-10T12:25:54.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 44,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-10T12:39:12.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-10T13:01:41.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-10T13:48:25.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 50,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-10T14:12:54.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-11T15:02:35.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-12T07:56:57.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 39,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-12T09:07:18.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-12T09:40:53.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-12T14:07:21.000Z",
+    "phone": "919470927606",
+    "name": "Saanvi Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-13T03:23:36.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-13T03:44:50.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-13T04:23:05.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-13T05:51:01.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 344,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-13T06:42:01.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-13T07:07:24.000Z",
+    "phone": "919386601799",
+    "name": "Vivaan Bhatia",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 85,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-13T08:05:33.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-13T08:12:08.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-13T08:54:31.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-13T09:42:27.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-13T10:04:49.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 536,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-13T10:27:20.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-13T10:32:40.000Z",
+    "phone": "919537660094",
+    "name": "Kavya Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-13T11:17:48.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 52,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-13T11:20:25.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 152,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-13T11:25:47.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-13T11:40:21.000Z",
+    "phone": "919470927606",
+    "name": "Saanvi Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 33,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-13T11:44:02.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-13T12:18:22.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-13T12:49:27.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-14T03:08:38.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-14T03:09:15.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-14T04:28:43.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-14T05:07:42.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-14T05:13:53.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-14T05:36:07.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 171,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-14T06:58:04.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 439,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-14T08:29:02.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-14T09:12:13.000Z",
+    "phone": "919571508627",
+    "name": "Myra Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-14T09:32:06.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 254,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-14T10:01:55.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-14T10:08:40.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 13,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-14T11:17:49.000Z",
+    "phone": "919122976578",
+    "name": "Aadhya Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 457,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-14T12:06:44.000Z",
+    "phone": "919470927606",
+    "name": "Saanvi Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 598,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-14T12:16:36.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-14T12:23:45.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 85,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-14T12:27:06.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-14T12:45:55.000Z",
+    "phone": "919465145420",
+    "name": "Kavya Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 452,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-15T01:40:08.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-15T02:37:40.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-15T03:11:03.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 308,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-15T03:19:13.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-15T06:01:34.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-15T06:17:59.000Z",
+    "phone": "919532629433",
+    "name": "Kabir Shah",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-15T07:01:27.000Z",
+    "phone": "919532629433",
+    "name": "Kabir Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 236,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-15T07:19:05.000Z",
+    "phone": "919881452397",
+    "name": "Meera Malhotra",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 415,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-15T08:02:14.000Z",
+    "phone": "919288843998",
+    "name": "Reyansh Iyer",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 19,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-15T08:55:54.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 28,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-15T09:03:36.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 550,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-15T09:36:07.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 336,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-15T10:19:56.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-15T10:57:33.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-15T11:46:45.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 54,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-16T02:30:58.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 118,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-16T03:50:16.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 28,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-16T04:49:00.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-16T05:19:12.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-16T05:25:55.000Z",
+    "phone": "919571508627",
+    "name": "Myra Mehta",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-16T08:06:18.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 463,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-16T09:37:17.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-16T11:03:53.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 513,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-16T11:05:48.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 216,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-16T11:23:51.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 442,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-16T15:01:02.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-17T02:58:28.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-17T03:44:30.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T03:56:48.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 252,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-17T05:08:45.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T05:25:41.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-17T05:42:09.000Z",
+    "phone": "919484559215",
+    "name": "Neha Sharma",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-17T05:54:18.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-17T06:05:52.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 77,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-17T06:25:08.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 54,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-17T08:13:45.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 63,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-17T08:58:16.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T09:32:48.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 444,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T09:45:40.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 53,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-17T09:47:07.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 411,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-17T09:58:44.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 350,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-17T10:05:23.000Z",
+    "phone": "919470927606",
+    "name": "Saanvi Joshi",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T11:08:03.000Z",
+    "phone": "919254592801",
+    "name": "Shreya Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T11:35:48.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-17T11:38:46.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-17T11:43:32.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-17T11:52:47.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 19,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-17T12:33:32.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-18T04:47:44.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 378,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-18T05:08:29.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-18T11:25:14.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-19T02:59:13.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-19T04:08:58.000Z",
+    "phone": "919288843998",
+    "name": "Reyansh Iyer",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-19T04:25:37.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 421,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-20T02:17:08.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 57,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-20T02:48:15.000Z",
+    "phone": "919157600940",
+    "name": "Riya Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 161,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-20T04:14:52.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-20T04:43:29.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 466,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-20T05:14:29.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-20T05:36:12.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 530,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-20T06:18:24.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-20T06:28:40.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-20T07:49:41.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-20T07:51:43.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 318,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-20T09:00:42.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-20T10:14:18.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 13,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-20T10:26:49.000Z",
+    "phone": "919864733188",
+    "name": "Sanjay Kapoor",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-20T10:40:03.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-20T10:56:30.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-20T11:18:26.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-20T12:28:51.000Z",
+    "phone": "919592196001",
+    "name": "Pooja Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 117,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-20T12:45:56.000Z",
+    "phone": "919383427819",
+    "name": "Nikhil Kapoor",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-21T04:47:33.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Invalid number",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-21T05:52:46.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 43,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-21T06:18:44.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 177,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-21T06:24:20.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-21T06:55:59.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 441,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-21T10:09:38.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-21T10:16:45.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-21T10:26:50.000Z",
+    "phone": "919157802688",
+    "name": "Neha Agarwal",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 572,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-21T11:50:43.000Z",
+    "phone": "919492200364",
+    "name": "Reyansh Reddy",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-21T12:43:41.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 333,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-21T12:47:13.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-21T14:19:10.000Z",
+    "phone": "919166313903",
+    "name": "Arjun Sharma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 66,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-21T14:35:51.000Z",
+    "phone": "919587210439",
+    "name": "Rohan Kulkarni",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-22T03:11:49.000Z",
+    "phone": "919571508627",
+    "name": "Myra Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-22T03:37:44.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T03:57:40.000Z",
+    "phone": "919936794312",
+    "name": "Diya Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 556,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-22T04:45:26.000Z",
+    "phone": "919185488195",
+    "name": "Vivaan Nair",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 49,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-22T05:00:09.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 535,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T05:19:20.000Z",
+    "phone": "919646371111",
+    "name": "Kavya Reddy",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-22T05:45:30.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Failed",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T07:09:14.000Z",
+    "phone": "919102892791",
+    "name": "Rahul Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 74,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T07:10:55.000Z",
+    "phone": "919451570442",
+    "name": "Pooja Verma",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 81,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-22T07:20:28.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T07:45:30.000Z",
+    "phone": "919062356378",
+    "name": "Vikram Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 610,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T07:56:37.000Z",
+    "phone": "919903369551",
+    "name": "Rahul Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 395,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-22T08:46:16.000Z",
+    "phone": "919567533055",
+    "name": "Anika Mehta",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 573,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-22T09:21:12.000Z",
+    "phone": "919745770042",
+    "name": "Sanjay Gupta",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-22T10:43:49.000Z",
+    "phone": "919690545633",
+    "name": "Krishna Das",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-22T11:44:05.000Z",
+    "phone": "919322008006",
+    "name": "Ishaan Kulkarni",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-23T02:01:23.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T02:36:15.000Z",
+    "phone": "919383427819",
+    "name": "Nikhil Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T03:19:02.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-23T04:11:08.000Z",
+    "phone": "919373276334",
+    "name": "Myra Sharma",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  },
+  {
+    "timestamp": "2026-07-23T04:13:48.000Z",
+    "phone": "919648491673",
+    "name": "Myra Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 19,
+    "temperature": 1
+  },
+  {
+    "timestamp": "2026-07-23T04:28:36.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "Busy",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T04:39:14.000Z",
+    "phone": "919961751065",
+    "name": "Meera Joshi",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T05:14:40.000Z",
+    "phone": "919928848182",
+    "name": "Krishna Kulkarni",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 81,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-23T05:18:02.000Z",
+    "phone": "919942734753",
+    "name": "Saanvi Shah",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 266,
+    "temperature": 3
+  },
+  {
+    "timestamp": "2026-07-23T05:31:07.000Z",
+    "phone": "919564654558",
+    "name": "Meera Chauhan",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 129,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T05:41:27.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T08:12:50.000Z",
+    "phone": "919378160899",
+    "name": "Anika Kapoor",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-23T08:14:08.000Z",
+    "phone": "919383427819",
+    "name": "Nikhil Kapoor",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 233,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T10:35:28.000Z",
+    "phone": "919978919401",
+    "name": "Kabir Mehta",
+    "outcome": "No answer",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 0
+  },
+  {
+    "timestamp": "2026-07-23T10:40:02.000Z",
+    "phone": "919254560973",
+    "name": "Nikhil Patil",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 608,
+    "temperature": 2
+  },
+  {
+    "timestamp": "2026-07-23T10:55:46.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 450,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T14:34:17.000Z",
+    "phone": "919555726688",
+    "name": "Rohan Iyer",
+    "outcome": "Connected",
+    "connected": true,
+    "durationSeconds": 351,
+    "temperature": 4
+  },
+  {
+    "timestamp": "2026-07-23T15:02:41.000Z",
+    "phone": "919288843998",
+    "name": "Reyansh Iyer",
+    "outcome": "Switched off / unreachable",
+    "connected": false,
+    "durationSeconds": null,
+    "temperature": 5
+  }
+]

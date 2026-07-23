@@ -38,6 +38,7 @@ const {
   exchangeCodeForUser,
   saveUser,
   getCurrentUser,
+  updateUserCompany,
   createSession,
   destroySession,
   readSessionIdFromRequest,
@@ -143,6 +144,69 @@ app.post("/auth/logout", (req, res) => {
   if (sessionId) destroySession(sessionId);
   clearSessionCookie(res);
   res.json({ success: true });
+});
+
+// Counts how many rows in the sheet currently have the given Stage value -
+// used for the profile menu's "Deals closed" stat (Stage === "Closed/Won").
+async function countLeadsAtStage(sheetId, stageName) {
+  const authClient = await auth.getClient();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
+  const stageCol = getColumnIndex(headers, "stage");
+
+  return dataRows.filter((row) => (row[stageCol] || "").trim() === stageName).length;
+}
+
+// GET /api/profile: the signed-in user's own info (name/email/photo/company)
+// plus their all-time personal stats. This app is single-operator, and the
+// call log has no per-user attribution, so "personal stats" here means the
+// whole call history - which IS this rep's own activity, since they're the
+// only one placing calls. Not available in demo mode (no real signed-in
+// user - getCurrentUser() is simply null for a demo session).
+app.get("/api/profile", async (req, res) => {
+  const user = getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  try {
+    // computeAnalytics() with no date/time filter = the whole call history.
+    const analytics = computeAnalytics(loadCallLog());
+    const dealsClosed = await countLeadsAtStage(SHEET_CONFIG.sheetId, "Closed/Won");
+
+    res.json({
+      name: user.name,
+      email: user.email,
+      picture: user.picture || null,
+      company: user.company || "",
+      stats: {
+        totalCalls: analytics.totalCalls,
+        connectedCount: analytics.connectedCount,
+        pickupRate: analytics.pickupRate,
+        dealsClosed,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to load profile:", error.message);
+    res.status(500).json({ error: "Failed to load profile." });
+  }
+});
+
+// POST /api/profile: updates the signed-in user's company/organisation -
+// the ONE editable field in the profile panel. Expects { "company": "..." }.
+app.post("/api/profile", (req, res) => {
+  const user = getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  const { company } = req.body;
+  if (company === undefined) {
+    return res.status(400).json({ error: "Request body must include 'company'." });
+  }
+
+  updateUserCompany(user.email, company);
+  res.json({ success: true, company });
 });
 
 // ── Google Sheet configuration ──────────────────────────────────────────
