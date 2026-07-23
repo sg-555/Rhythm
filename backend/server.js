@@ -40,6 +40,7 @@ const {
   getUser,
   getCurrentUser,
   updateUserCompany,
+  updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
   getUserOAuthClient,
@@ -125,7 +126,16 @@ app.get("/api/me", (req, res) => {
     // itself is what lets the frontend build an "Open my sheet" link - it's
     // not sensitive (the user already owns/can open this sheet in Google
     // Sheets directly), so there's no harm in sending it down.
-    user: user ? { email: user.email, name: user.name, hasSheet: !!user.sheetId, sheetId: user.sheetId || null } : null,
+    user: user
+      ? {
+          email: user.email,
+          name: user.name,
+          picture: user.picture || null,
+          hasSheet: !!user.sheetId,
+          sheetId: user.sheetId || null,
+          theme: user.theme || null,
+        }
+      : null,
     demo: isDemoRequest(req),
   });
 });
@@ -165,13 +175,57 @@ async function countLeadsAtStage(sheets, sheetId, stageName) {
   return dataRows.filter((row) => (row[stageCol] || "").trim() === stageName).length;
 }
 
+// A made-up persona for demo mode's profile panel - there's no real signed-in
+// user to describe, but the demo is meant to showcase this feature too, so
+// it gets a believable stand-in instead of an error. Stats below are real
+// numbers computed from the seeded demo call log/sheet, not made up.
+const DEMO_PROFILE_PERSONA = {
+  name: "Demo Visitor",
+  email: "demo@rhythm.ai",
+  company: "Rhythm Demo Co.",
+};
+
 // GET /api/profile: the signed-in user's own info (name/email/photo/company)
 // plus their all-time personal stats. This app is single-operator, and the
 // call log has no per-user attribution, so "personal stats" here means the
 // whole call history - which IS this rep's own activity, since they're the
-// only one placing calls. Not available in demo mode (no real signed-in
-// user - getCurrentUser() is simply null for a demo session).
+// only one placing calls. In demo mode there's no real signed-in user, so a
+// fixed persona (see DEMO_PROFILE_PERSONA above) stands in, with stats
+// computed from the seeded demo call log/sheet instead of the real ones.
 app.get("/api/profile", async (req, res) => {
+  if (isDemoRequest(req)) {
+    try {
+      const analytics = computeAnalytics(loadCallLog(DEMO_CALL_LOG_FILE_PATH));
+
+      let dealsClosed = 0;
+      try {
+        const { sheets, sheetId } = await getSheetsContextForRequest(req);
+        dealsClosed = await countLeadsAtStage(sheets, sheetId, "Closed/Won");
+      } catch (error) {
+        console.error("Could not compute demo deals closed:", error.message);
+      }
+
+      return res.json({
+        name: DEMO_PROFILE_PERSONA.name,
+        email: DEMO_PROFILE_PERSONA.email,
+        picture: null,
+        company: DEMO_PROFILE_PERSONA.company,
+        hasSheet: true,
+        sheetId: null, // no "Open my sheet" link - it's a shared seeded demo sheet, not the visitor's own
+        theme: null,
+        stats: {
+          totalCalls: analytics.totalCalls,
+          connectedCount: analytics.connectedCount,
+          pickupRate: analytics.pickupRate,
+          dealsClosed,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to load demo profile:", error.message);
+      return res.status(500).json({ error: "Failed to load demo profile." });
+    }
+  }
+
   const user = getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
@@ -202,6 +256,8 @@ app.get("/api/profile", async (req, res) => {
       hasSheet: !!user.sheetId,
       // Lets the profile panel show a permanent "Open my sheet" link.
       sheetId: user.sheetId || null,
+      // "light"/"dark", or null to mean "follow system preference".
+      theme: user.theme || null,
       stats: {
         totalCalls: analytics.totalCalls,
         connectedCount: analytics.connectedCount,
@@ -215,21 +271,24 @@ app.get("/api/profile", async (req, res) => {
   }
 });
 
-// POST /api/profile: updates the signed-in user's company/organisation -
-// the ONE editable field in the profile panel. Expects { "company": "..." }.
+// POST /api/profile: updates the signed-in user's company/organisation
+// and/or theme preference - the editable fields in the profile panel.
+// Expects { "company": "..." } and/or { "theme": "light"|"dark"|null }.
 app.post("/api/profile", (req, res) => {
   const user = getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
 
-  const { company } = req.body;
-  if (company === undefined) {
-    return res.status(400).json({ error: "Request body must include 'company'." });
+  const { company, theme } = req.body;
+  if (company === undefined && theme === undefined) {
+    return res.status(400).json({ error: "Request body must include 'company' or 'theme'." });
   }
 
-  updateUserCompany(user.email, company);
-  res.json({ success: true, company });
+  if (company !== undefined) updateUserCompany(user.email, company);
+  if (theme !== undefined) updateUserTheme(user.email, theme);
+
+  res.json({ success: true, company, theme });
 });
 
 // ── Google Sheet configuration ──────────────────────────────────────────

@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <title>Rhythm.ai — Analytics</title>
 
+  <!-- Applies a saved theme choice BEFORE the page paints - see the
+       matching script in index.html for the full explanation. -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem("rhythmTheme");
+      if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    })();
+  </script>
+
   <!-- Chart.js - a simple, popular charting library, loaded from a CDN (no
        install needed), same way the Twilio Voice SDK is loaded elsewhere. -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -15,13 +26,26 @@
 
   <style>
     /* ── Design tokens - identical set to index.html/callbacks.html, so all
-       three pages feel like one consistent product. */
+       three pages feel like one consistent product.
+
+       DARK MODE: every colour lives here as a token so dark mode is just a
+       second set of values for the same names - nothing below :root should
+       ever hard-code a colour. Three layers, in order of priority (highest
+       wins): 1. :root (light, default) 2. @media prefers-color-scheme:dark
+       (system preference) 3. html[data-theme] (manual override, set by
+       applyTheme() in the script - see index.html for the full rationale).
+       The two chart-color constants further down (TEMPERATURE_COLORS and
+       the bar-chart color) are read live from these same tokens via
+       getComputedStyle(), so Chart.js automatically follows whichever mode
+       is active - see renderCharts(). */
     :root {
       /* Warm paper backgrounds - not cool grey */
       --bg-page: #FAF9F7;
       --bg-subtle: #F0ECE5;
       --bg-surface: #FFFFFF;
       --bg-hover: #F5F1EA;
+      --hot-bg-hover: #F8D4CF;
+      --warm-bg-hover: #FBE6B8;
 
       /* A warm near-black for real contrast, not a mid-grey or a cool slate */
       --ink: #211D18;
@@ -41,6 +65,10 @@
       --accent-ink: #1B7943;
       --accent-bg: #E9F9EF;
 
+      --danger: #E5484D;
+      --danger-hover: #CC3D42;
+      --danger-bg: #FDECEC;
+
       /* Temperature colours - a touch more saturated than the warm neutral
          chrome, and distinct from the interactive blue. */
       --cold-bg: #D8EEEA;
@@ -51,6 +79,10 @@
       --hot-ink: #A32E1F;
       --none-bg: #EDE8E1;
       --none-ink: #6E6459;
+
+      /* Text colour for use ON TOP of a solid accent/interactive/danger
+         button background - same in both themes. */
+      --on-accent: #FFFFFF;
 
       /* Typography: Space Grotesk for display/headings/numbers, Inter for
          body/UI. */
@@ -68,6 +100,109 @@
       --radius-lg: 14px;
       --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
       --transition: 160ms ease;
+    }
+
+    /* ── Dark mode (system preference) - see index.html for the full
+       rationale on every value below; kept identical across all three
+       pages. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-page: #1A1714;
+        --bg-subtle: #2A241D;
+        --bg-surface: #221E1A;
+        --bg-hover: #302A22;
+        --hot-bg-hover: #472520;
+        --warm-bg-hover: #453712;
+
+        --ink: #EDE6DA;
+        --ink-muted: #A89C8B;
+        --ink-faint: #8A8071;
+        --border: #342E26;
+        --border-strong: #453D32;
+
+        --interactive-bg: #202836;
+        --accent-ink: #6FDB9E;
+        --accent-bg: #182A20;
+        --danger-bg: #3A1A1B;
+
+        --cold-bg: #16302C;
+        --cold-ink: #5FC4B0;
+        --warm-bg: #3A2E14;
+        --warm-ink: #E8B84B;
+        --hot-bg: #3A1F1B;
+        --hot-ink: #E8927E;
+        --none-bg: #2A241D;
+        --none-ink: #A89C8B;
+
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    /* ── Dark mode (manual override) - wins over the media query above
+       regardless of OS setting, set by applyTheme(). Same values as the
+       media query block. */
+    html[data-theme="dark"] {
+      --bg-page: #1A1714;
+      --bg-subtle: #2A241D;
+      --bg-surface: #221E1A;
+      --bg-hover: #302A22;
+      --hot-bg-hover: #472520;
+      --warm-bg-hover: #453712;
+
+      --ink: #EDE6DA;
+      --ink-muted: #A89C8B;
+      --ink-faint: #8A8071;
+      --border: #342E26;
+      --border-strong: #453D32;
+
+      --interactive-bg: #202836;
+      --accent-ink: #6FDB9E;
+      --accent-bg: #182A20;
+      --danger-bg: #3A1A1B;
+
+      --cold-bg: #16302C;
+      --cold-ink: #5FC4B0;
+      --warm-bg: #3A2E14;
+      --warm-ink: #E8B84B;
+      --hot-bg: #3A1F1B;
+      --hot-ink: #E8927E;
+      --none-bg: #2A241D;
+      --none-ink: #A89C8B;
+
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Forces LIGHT even if the OS prefers dark - just re-states the :root
+       (light) values, so it always wins over the dark media query above. */
+    html[data-theme="light"] {
+      --bg-page: #FAF9F7;
+      --bg-subtle: #F0ECE5;
+      --bg-surface: #FFFFFF;
+      --bg-hover: #F5F1EA;
+      --hot-bg-hover: #F8D4CF;
+      --warm-bg-hover: #FBE6B8;
+
+      --ink: #211D18;
+      --ink-muted: #6E6459;
+      --ink-faint: #948C7F;
+      --border: #E4DFD6;
+      --border-strong: #D2CABC;
+
+      --interactive-bg: #EAF2FC;
+      --accent-ink: #1B7943;
+      --accent-bg: #E9F9EF;
+      --danger-bg: #FDECEC;
+
+      --cold-bg: #D8EEEA;
+      --cold-ink: #0E5F55;
+      --warm-bg: #FBE3B8;
+      --warm-ink: #8A5900;
+      --hot-bg: #F8D2CA;
+      --hot-ink: #A32E1F;
+      --none-bg: #EDE8E1;
+      --none-ink: #6E6459;
+
+      --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -184,27 +319,60 @@
       padding: 0 var(--sp-1);
     }
 
-    /* The signed-in user's name - clickable (opens the profile panel) only
-       for a real signed-in user, not demo mode - see checkSignedIn(). */
-    .user-name-button {
+    /* The signed-in user's account control - see index.html's copy of this
+       for the full explanation. Clickable for a real signed-in user AND
+       demo mode - see checkSignedIn(). */
+    .account-button {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
       font-family: inherit;
       font-size: inherit;
       font-weight: 600;
       color: var(--ink);
       background: none;
-      border: none;
+      border: 1px solid transparent;
       padding: var(--sp-1) var(--sp-2);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-md);
       cursor: default;
     }
 
-    .user-name-button.clickable {
+    .account-button.clickable {
       cursor: pointer;
-      transition: background var(--transition);
+      transition: background var(--transition), border-color var(--transition);
     }
 
-    .user-name-button.clickable:hover {
+    .account-button.clickable:hover {
       background: var(--bg-hover);
+      border-color: var(--border);
+    }
+
+    .account-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--interactive-bg);
+      color: var(--interactive);
+      font-family: var(--font-display);
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .account-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .account-chevron {
+      color: var(--ink-faint);
+      flex-shrink: 0;
     }
 
     /* ── Profile panel ────────────────────────────────────────────────────
@@ -310,7 +478,7 @@
     }
 
     .call-button {
-      color: #ffffff;
+      color: var(--on-accent);
       background: var(--accent);
       border-color: var(--accent);
     }
@@ -361,7 +529,7 @@
       display: inline-block;
       margin-bottom: var(--sp-3);
       background: var(--interactive);
-      color: #ffffff;
+      color: var(--on-accent);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.85rem;
@@ -392,6 +560,39 @@
 
     .company-input:focus-visible {
       border-color: var(--interactive);
+    }
+
+    /* Theme toggle - see index.html's copy of this for the full explanation. */
+    .theme-toggle-group {
+      display: flex;
+      gap: var(--sp-1);
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-1);
+    }
+
+    .theme-toggle-button {
+      flex: 1;
+      font-family: inherit;
+      font-size: var(--text-meta);
+      font-weight: 600;
+      color: var(--ink-muted);
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    .theme-toggle-button:hover {
+      color: var(--ink);
+    }
+
+    .theme-toggle-button.active {
+      background: var(--bg-surface);
+      color: var(--ink);
+      box-shadow: var(--shadow-card);
     }
 
     .profile-stats-grid {
@@ -497,7 +698,7 @@
     .google-signin-button {
       display: inline-block;
       background: var(--interactive);
-      color: #ffffff;
+      color: var(--on-accent);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.95rem;
@@ -684,7 +885,15 @@
       </nav>
     </div>
     <div class="user-bar">
-      <button id="userBarName" type="button" class="user-name-button"></button>
+      <!-- Opens the profile panel - for a real signed-in user AND for demo
+           mode (see checkSignedIn() and the click handler below). -->
+      <button id="userBarName" type="button" class="account-button">
+        <span id="userBarAvatar" class="account-avatar"></span>
+        <span id="userBarNameText" class="account-name"></span>
+        <svg class="account-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
       <button id="signOutButton" class="sign-out-button">Sign out</button>
     </div>
   </div>
@@ -791,14 +1000,47 @@
     const signInOverlay = document.getElementById("signInOverlay");
     const onboardingOverlay = document.getElementById("onboardingOverlay");
     const userBarName = document.getElementById("userBarName");
+    const userBarAvatar = document.getElementById("userBarAvatar");
+    const userBarNameText = document.getElementById("userBarNameText");
     const signOutButton = document.getElementById("signOutButton");
     const demoBanner = document.getElementById("demoBanner");
     let demoMode = false;
+
+    // Fills in the top bar's small circular avatar - see index.html's copy
+    // of this for the full explanation.
+    function setUserBarAvatar(name, picture) {
+      userBarAvatar.innerHTML = "";
+      if (picture) {
+        const img = document.createElement("img");
+        img.src = picture;
+        img.alt = "";
+        userBarAvatar.appendChild(img);
+      } else {
+        userBarAvatar.textContent = (name || "?").charAt(0).toUpperCase();
+      }
+    }
 
     // The one place we build a link to a Google Sheet from its ID - see
     // index.html's copy of this for the full explanation.
     function sheetUrlFor(sheetId) {
       return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    }
+
+    // Theme (light/dark) - see index.html's copy of this for the full
+    // explanation.
+    function applyTheme(theme) {
+      if (theme === "light" || theme === "dark") {
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("rhythmTheme", theme);
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.removeItem("rhythmTheme");
+      }
+      // The charts read their colors from CSS custom properties at render
+      // time (see TEMPERATURE_COLORS/chartColor() below) - if they've
+      // already been drawn once, redraw them now so they pick up the
+      // just-applied theme instead of staying stuck with the old colors.
+      if (typeof refreshChartsForTheme === "function") refreshChartsForTheme();
     }
 
     // Returns "ready" / "onboarding" / "signedOut" - see index.html's copy
@@ -813,9 +1055,17 @@
 
         if (data.user) {
           signInOverlay.style.display = "none";
-          userBarName.textContent = data.user.name || data.user.email;
+          const displayName = data.user.name || data.user.email;
+          userBarNameText.textContent = displayName;
+          setUserBarAvatar(displayName, data.user.picture);
           userBarName.classList.add("clickable");
           signOutButton.textContent = "Sign out";
+
+          // Sync the server-persisted theme choice into this browser - see
+          // index.html's copy of this for the full explanation.
+          if (data.user.theme && data.user.theme !== localStorage.getItem("rhythmTheme")) {
+            applyTheme(data.user.theme);
+          }
 
           if (!data.user.hasSheet) {
             onboardingOverlay.style.display = "flex";
@@ -829,8 +1079,11 @@
 
         if (demoMode) {
           signInOverlay.style.display = "none";
-          userBarName.textContent = "Demo visitor";
-          userBarName.classList.remove("clickable");
+          userBarNameText.textContent = "Demo visitor";
+          setUserBarAvatar("Demo visitor", null);
+          // Demo mode gets the profile panel too - see index.html's copy
+          // of this for the full explanation.
+          userBarName.classList.add("clickable");
           signOutButton.textContent = "Exit demo";
           return "ready";
         }
@@ -929,43 +1182,55 @@
         profilePanelContent.appendChild(openSheetLink);
       }
 
+      // Editable for a real signed-in user; demo mode just shows the demo
+      // persona's company as plain text - see index.html's copy of this
+      // for the full explanation.
       const companyContainer = document.createElement("div");
-      const companyRow = document.createElement("div");
-      companyRow.className = "company-row";
 
-      const companyInput = document.createElement("input");
-      companyInput.type = "text";
-      companyInput.className = "company-input";
-      companyInput.placeholder = "Add your company/organisation";
-      companyInput.value = profile.company || "";
-      companyRow.appendChild(companyInput);
+      if (demoMode) {
+        const companyText = document.createElement("p");
+        companyText.style.margin = "0";
+        companyText.style.color = "var(--ink)";
+        companyText.textContent = profile.company || "(none)";
+        companyContainer.appendChild(companyText);
+      } else {
+        const companyRow = document.createElement("div");
+        companyRow.className = "company-row";
 
-      const saveCompanyButton = document.createElement("button");
-      saveCompanyButton.className = "call-button";
-      saveCompanyButton.textContent = "Save";
-      companyRow.appendChild(saveCompanyButton);
+        const companyInput = document.createElement("input");
+        companyInput.type = "text";
+        companyInput.className = "company-input";
+        companyInput.placeholder = "Add your company/organisation";
+        companyInput.value = profile.company || "";
+        companyRow.appendChild(companyInput);
 
-      companyContainer.appendChild(companyRow);
+        const saveCompanyButton = document.createElement("button");
+        saveCompanyButton.className = "call-button";
+        saveCompanyButton.textContent = "Save";
+        companyRow.appendChild(saveCompanyButton);
 
-      const companyStatus = document.createElement("span");
-      companyStatus.className = "call-status";
-      companyContainer.appendChild(companyStatus);
+        companyContainer.appendChild(companyRow);
 
-      saveCompanyButton.addEventListener("click", async () => {
-        companyStatus.textContent = "Saving...";
-        try {
-          const response = await fetch("/api/profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ company: companyInput.value }),
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Could not save company.");
-          companyStatus.textContent = "Saved.";
-        } catch (error) {
-          companyStatus.textContent = "Error: " + error.message;
-        }
-      });
+        const companyStatus = document.createElement("span");
+        companyStatus.className = "call-status";
+        companyContainer.appendChild(companyStatus);
+
+        saveCompanyButton.addEventListener("click", async () => {
+          companyStatus.textContent = "Saving...";
+          try {
+            const response = await fetch("/api/profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ company: companyInput.value }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not save company.");
+            companyStatus.textContent = "Saved.";
+          } catch (error) {
+            companyStatus.textContent = "Error: " + error.message;
+          }
+        });
+      }
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
@@ -996,11 +1261,48 @@
 
       profilePanelContent.appendChild(makeSection("All-time stats", statsGrid));
 
+      // Theme - see index.html's copy of this for the full explanation.
+      const themeGroup = document.createElement("div");
+      themeGroup.className = "theme-toggle-group";
+
+      const currentTheme = localStorage.getItem("rhythmTheme") || "system";
+
+      [
+        { value: "system", label: "System" },
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
+      ].forEach(({ value, label }) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "theme-toggle-button" + (value === currentTheme ? " active" : "");
+        button.textContent = label;
+        button.addEventListener("click", async () => {
+          applyTheme(value);
+          Array.from(themeGroup.children).forEach((btn) => btn.classList.remove("active"));
+          button.classList.add("active");
+
+          if (!demoMode) {
+            try {
+              await fetch("/api/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ theme: value }),
+              });
+            } catch (error) {
+              // Non-critical - the local choice still works for this browser.
+            }
+          }
+        });
+        themeGroup.appendChild(button);
+      });
+
+      profilePanelContent.appendChild(makeSection("Theme", themeGroup));
+
       const signOutRow = document.createElement("div");
       signOutRow.className = "profile-signout-row";
       const signOutInPanel = document.createElement("button");
       signOutInPanel.className = "btn-secondary";
-      signOutInPanel.textContent = "Sign out";
+      signOutInPanel.textContent = demoMode ? "Exit demo" : "Sign out";
       signOutInPanel.addEventListener("click", handleSignOut);
       signOutRow.appendChild(signOutInPanel);
       profilePanelContent.appendChild(signOutRow);
@@ -1022,8 +1324,7 @@
     }
 
     userBarName.addEventListener("click", () => {
-      if (demoMode) return;
-      openProfilePanel();
+      openProfilePanel(); // works in demo mode too - see renderProfilePanel()
     });
 
     // These hold the three Chart.js chart objects once created, so we can
@@ -1033,18 +1334,51 @@
     let outcomeChart = null;
     let hourChart = null;
 
-    // Colours reused from the SAME Hot/Warm/Cold colours already used
+    // The last analytics payload the charts were drawn from - kept around
+    // purely so refreshChartsForTheme() (called by applyTheme()) can redraw
+    // the SAME data with new colors when the theme changes, without another
+    // round-trip to the server.
+    let lastAnalyticsData = null;
+
+    // Reads a color token's live value straight off the page, so chart
+    // colors automatically track whichever theme is currently active
+    // (light, dark-by-system, or dark-by-override) instead of being frozen
+    // at whatever the OS preferred when the page first loaded.
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    // Colours reused from the SAME Hot/Warm/Cold tokens already used
     // everywhere else in the app (the Temperature badge, due-item
     // highlighting) - keeps this dashboard visually consistent with the
-    // rest of Rhythm instead of inventing a new colour scheme. Cold is a
-    // grey-teal (not blue) on purpose, so it never blends into the
-    // interface's own interactive blue.
-    const TEMPERATURE_COLORS = {
-      hot: "#B23A2E",
-      warm: "#92620A",
-      cold: "#12695F",
-      unknown: "#8A96A3",
-    };
+    // rest of Rhythm instead of inventing a new colour scheme, and means
+    // dark mode "just works" here too since these tokens already have
+    // validated dark-mode values (see the :root/@media/[data-theme]
+    // blocks above). Cold is a grey-teal (not blue) on purpose, so it
+    // never blends into the interface's own interactive blue. Read live
+    // (not a constant) so it always reflects the CURRENT theme.
+    function getTemperatureColors() {
+      return {
+        hot: cssVar("--hot-ink"),
+        warm: cssVar("--warm-ink"),
+        cold: cssVar("--cold-ink"),
+        unknown: cssVar("--ink-faint"),
+      };
+    }
+
+    // Shared Chart.js options for axis/gridline/legend/tooltip colors, read
+    // live from the current theme's ink/border tokens - without this,
+    // Chart.js's own default dark axis text would be unreadable against a
+    // dark-mode chart background.
+    function chartThemeOptions() {
+      const gridColor = cssVar("--border");
+      const textColor = cssVar("--ink-muted");
+      return {
+        legendLabels: { color: textColor },
+        ticks: { color: textColor },
+        grid: { color: gridColor },
+      };
+    }
 
     // Turns a real Date into a "YYYY-MM-DD" string using LOCAL date parts
     // (not UTC) - toISOString() would give the wrong calendar day close to
@@ -1125,7 +1459,9 @@
       const labels = ["Hot", "Warm", "Cold", "No temperature yet"];
       const keys = ["hot", "warm", "cold", "unknown"];
       const values = keys.map((key) => temperatureBreakdown[key] || 0);
-      const colors = keys.map((key) => TEMPERATURE_COLORS[key]);
+      const temperatureColors = getTemperatureColors();
+      const colors = keys.map((key) => temperatureColors[key]);
+      const theme = chartThemeOptions();
 
       if (temperatureChart) temperatureChart.destroy(); // clear the old chart first
 
@@ -1140,7 +1476,8 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: "bottom" }, // shows the text label next to each colour, not colour alone
+            // shows the text label next to each colour, not colour alone
+            legend: { position: "bottom", labels: { color: theme.legendLabels.color } },
           },
         },
       });
@@ -1161,6 +1498,7 @@
     function renderOutcomeChart(outcomeBreakdown) {
       const labels = Object.keys(outcomeBreakdown);
       const values = labels.map((label) => outcomeBreakdown[label]);
+      const theme = chartThemeOptions();
 
       if (outcomeChart) outcomeChart.destroy();
 
@@ -1169,13 +1507,16 @@
         type: "bar",
         data: {
           labels,
-          datasets: [{ label: "Calls", data: values, backgroundColor: "#4A90E2" }],
+          datasets: [{ label: "Calls", data: values, backgroundColor: cssVar("--interactive") }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           plugins: { legend: { display: false } }, // one series, own axis labels already say what it is
-          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+          scales: {
+            x: { ticks: { color: theme.ticks.color }, grid: { color: theme.grid.color } },
+            y: { beginAtZero: true, ticks: { precision: 0, color: theme.ticks.color }, grid: { color: theme.grid.color } },
+          },
         },
       });
     }
@@ -1186,6 +1527,7 @@
     function renderHourChart(pickupRateByHour) {
       const labels = pickupRateByHour.map((entry) => `${entry.hour}:00`);
       const values = pickupRateByHour.map((entry) => Math.round(entry.rate * 100));
+      const theme = chartThemeOptions();
 
       if (hourChart) hourChart.destroy();
 
@@ -1194,7 +1536,7 @@
         type: "bar",
         data: {
           labels,
-          datasets: [{ label: "Pick-up rate", data: values, backgroundColor: "#4A90E2" }],
+          datasets: [{ label: "Pick-up rate", data: values, backgroundColor: cssVar("--interactive") }],
         },
         options: {
           responsive: true,
@@ -1213,7 +1555,15 @@
               },
             },
           },
-          scales: { y: { beginAtZero: true, max: 100, ticks: { callback: (value) => value + "%" } } },
+          scales: {
+            x: { ticks: { color: theme.ticks.color }, grid: { color: theme.grid.color } },
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: { callback: (value) => value + "%", color: theme.ticks.color },
+              grid: { color: theme.grid.color },
+            },
+          },
         },
       });
     }
@@ -1256,6 +1606,7 @@
         if (!response.ok) throw new Error("Server responded with an error");
 
         renderMetrics(data);
+        lastAnalyticsData = data;
 
         if (data.totalCalls === 0) {
           showChartsEmptyState("No calls logged for this filter yet.");
@@ -1269,6 +1620,17 @@
       } catch (error) {
         showChartsEmptyState("Couldn't load analytics right now. Please check the server and try again.");
       }
+    }
+
+    // Redraws the three charts from the LAST fetched data (no new server
+    // request needed) using whatever colors the current theme now has -
+    // called by applyTheme() whenever the theme toggle changes, so charts
+    // already on screen don't stay stuck with the old theme's colors.
+    function refreshChartsForTheme() {
+      if (!lastAnalyticsData || lastAnalyticsData.totalCalls === 0) return;
+      renderTemperatureChart(lastAnalyticsData.temperatureBreakdown);
+      renderOutcomeChart(lastAnalyticsData.outcomeBreakdown);
+      renderHourChart(lastAnalyticsData.pickupRateByHour);
     }
 
     // Re-load whenever any filter changes.

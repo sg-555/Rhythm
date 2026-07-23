@@ -106,6 +106,10 @@ function saveUser(email, tokens, profile) {
     // applyPhoneColumnPlainTextFormat() in server.js. Lets that fix-up run
     // at most once per user instead of on every request.
     phoneColumnFormatted: existing.phoneColumnFormatted || false,
+    // "light", "dark", or null (= follow system preference) - set via the
+    // profile panel's theme toggle. Never touched here, so re-signing in
+    // never loses it.
+    theme: existing.theme || null,
     accessToken: tokens.access_token,
     // Google only sends a refresh_token the FIRST time you consent (or
     // whenever we force prompt=consent, like we do above) - if THIS sign-in
@@ -146,6 +150,18 @@ function updateUserSheetId(email, sheetId) {
   if (!users[email]) return null;
 
   users[email].sheetId = sheetId;
+  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  return users[email];
+}
+
+// Updates just the theme preference for one user (the profile panel's
+// toggle). Pass null to go back to "follow system preference". Returns the
+// updated user, or null if we've never seen this email before.
+function updateUserTheme(email, theme) {
+  const users = loadUsers();
+  if (!users[email]) return null;
+
+  users[email].theme = theme || null;
   fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
   return users[email];
 }
@@ -288,6 +304,7 @@ module.exports = {
   saveUser,
   getUser,
   updateUserCompany,
+  updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
   updateUserTokens,

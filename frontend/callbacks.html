@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <title>Rhythm.ai — Call-backs</title>
 
+  <!-- Applies a saved theme choice BEFORE the page paints - see the
+       matching script in index.html for the full explanation. -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem("rhythmTheme");
+      if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    })();
+  </script>
+
   <!-- Twilio's browser calling library (loaded from a CDN, no install needed) -->
   <script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.18.3/dist/twilio.min.js"></script>
 
@@ -14,13 +25,22 @@
 
   <style>
     /* ── Design tokens - identical set to index.html, so the two pages feel
-       like one consistent product. See index.html for the full rationale. */
+       like one consistent product. See index.html for the full rationale.
+
+       DARK MODE: every colour lives here as a token so dark mode is just a
+       second set of values for the same names - nothing below :root should
+       ever hard-code a colour. Three layers, in order of priority (highest
+       wins): 1. :root (light, default) 2. @media prefers-color-scheme:dark
+       (system preference) 3. html[data-theme] (manual override, set by
+       applyTheme() in the script - see index.html for the full rationale). */
     :root {
       /* Warm paper backgrounds - not cool grey */
       --bg-page: #FAF9F7;
       --bg-subtle: #F0ECE5;
       --bg-surface: #FFFFFF;
       --bg-hover: #F5F1EA;
+      --hot-bg-hover: #F8D4CF;
+      --warm-bg-hover: #FBE6B8;
 
       /* A warm near-black for real contrast, not a mid-grey or a cool slate */
       --ink: #211D18;
@@ -55,6 +75,10 @@
       --none-bg: #EDE8E1;
       --none-ink: #6E6459;
 
+      /* Text colour for use ON TOP of a solid accent/interactive/danger
+         button background - same in both themes. */
+      --on-accent: #FFFFFF;
+
       /* Typography: Space Grotesk for display/headings/numbers, Inter for
          body/UI. */
       --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -72,6 +96,113 @@
       --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
       --shadow-panel: -8px 0 32px rgba(33, 29, 24, 0.16);
       --transition: 160ms ease;
+    }
+
+    /* ── Dark mode (system preference) - see index.html for the full
+       rationale on every value below; kept identical across all three
+       pages so the app feels consistent regardless of which page loads
+       first. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-page: #1A1714;
+        --bg-subtle: #2A241D;
+        --bg-surface: #221E1A;
+        --bg-hover: #302A22;
+        --hot-bg-hover: #472520;
+        --warm-bg-hover: #453712;
+
+        --ink: #EDE6DA;
+        --ink-muted: #A89C8B;
+        --ink-faint: #8A8071;
+        --border: #342E26;
+        --border-strong: #453D32;
+
+        --interactive-bg: #202836;
+        --accent-ink: #6FDB9E;
+        --accent-bg: #182A20;
+        --danger-bg: #3A1A1B;
+
+        --cold-bg: #16302C;
+        --cold-ink: #5FC4B0;
+        --warm-bg: #3A2E14;
+        --warm-ink: #E8B84B;
+        --hot-bg: #3A1F1B;
+        --hot-ink: #E8927E;
+        --none-bg: #2A241D;
+        --none-ink: #A89C8B;
+
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+        --shadow-panel: -8px 0 32px rgba(0, 0, 0, 0.45);
+      }
+    }
+
+    /* ── Dark mode (manual override) - wins over the media query above
+       regardless of OS setting, set by applyTheme(). Same values as the
+       media query block. */
+    html[data-theme="dark"] {
+      --bg-page: #1A1714;
+      --bg-subtle: #2A241D;
+      --bg-surface: #221E1A;
+      --bg-hover: #302A22;
+      --hot-bg-hover: #472520;
+      --warm-bg-hover: #453712;
+
+      --ink: #EDE6DA;
+      --ink-muted: #A89C8B;
+      --ink-faint: #8A8071;
+      --border: #342E26;
+      --border-strong: #453D32;
+
+      --interactive-bg: #202836;
+      --accent-ink: #6FDB9E;
+      --accent-bg: #182A20;
+      --danger-bg: #3A1A1B;
+
+      --cold-bg: #16302C;
+      --cold-ink: #5FC4B0;
+      --warm-bg: #3A2E14;
+      --warm-ink: #E8B84B;
+      --hot-bg: #3A1F1B;
+      --hot-ink: #E8927E;
+      --none-bg: #2A241D;
+      --none-ink: #A89C8B;
+
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+      --shadow-panel: -8px 0 32px rgba(0, 0, 0, 0.45);
+    }
+
+    /* Forces LIGHT even if the OS prefers dark - just re-states the :root
+       (light) values, so it always wins over the dark media query above. */
+    html[data-theme="light"] {
+      --bg-page: #FAF9F7;
+      --bg-subtle: #F0ECE5;
+      --bg-surface: #FFFFFF;
+      --bg-hover: #F5F1EA;
+      --hot-bg-hover: #F8D4CF;
+      --warm-bg-hover: #FBE6B8;
+
+      --ink: #211D18;
+      --ink-muted: #6E6459;
+      --ink-faint: #948C7F;
+      --border: #E4DFD6;
+      --border-strong: #D2CABC;
+
+      --interactive-bg: #EAF2FC;
+      --accent-ink: #1B7943;
+      --accent-bg: #E9F9EF;
+      --danger-bg: #FDECEC;
+
+      --cold-bg: #D8EEEA;
+      --cold-ink: #0E5F55;
+      --warm-bg: #FBE3B8;
+      --warm-ink: #8A5900;
+      --hot-bg: #F8D2CA;
+      --hot-ink: #A32E1F;
+      --none-bg: #EDE8E1;
+      --none-ink: #6E6459;
+
+      --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
+      --shadow-panel: -8px 0 32px rgba(33, 29, 24, 0.16);
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -190,27 +321,60 @@
       padding: 0 var(--sp-1);
     }
 
-    /* The signed-in user's name - clickable (opens the profile panel) only
-       for a real signed-in user, not demo mode - see checkSignedIn(). */
-    .user-name-button {
+    /* The signed-in user's account control - see index.html's copy of this
+       for the full explanation. Clickable for a real signed-in user AND
+       demo mode - see checkSignedIn(). */
+    .account-button {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
       font-family: inherit;
       font-size: inherit;
       font-weight: 600;
       color: var(--ink);
       background: none;
-      border: none;
+      border: 1px solid transparent;
       padding: var(--sp-1) var(--sp-2);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-md);
       cursor: default;
     }
 
-    .user-name-button.clickable {
+    .account-button.clickable {
       cursor: pointer;
-      transition: background var(--transition);
+      transition: background var(--transition), border-color var(--transition);
     }
 
-    .user-name-button.clickable:hover {
+    .account-button.clickable:hover {
       background: var(--bg-hover);
+      border-color: var(--border);
+    }
+
+    .account-avatar {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--interactive-bg);
+      color: var(--interactive);
+      font-family: var(--font-display);
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .account-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .account-chevron {
+      color: var(--ink-faint);
+      flex-shrink: 0;
     }
 
     /* ── Profile panel - identical to index.html's ─────────────────────── */
@@ -244,7 +408,7 @@
       display: inline-block;
       margin-bottom: var(--sp-3);
       background: var(--interactive);
-      color: #ffffff;
+      color: var(--on-accent);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.85rem;
@@ -275,6 +439,39 @@
 
     .company-input:focus-visible {
       border-color: var(--interactive);
+    }
+
+    /* Theme toggle - see index.html's copy of this for the full explanation. */
+    .theme-toggle-group {
+      display: flex;
+      gap: var(--sp-1);
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-1);
+    }
+
+    .theme-toggle-button {
+      flex: 1;
+      font-family: inherit;
+      font-size: var(--text-meta);
+      font-weight: 600;
+      color: var(--ink-muted);
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    .theme-toggle-button:hover {
+      color: var(--ink);
+    }
+
+    .theme-toggle-button.active {
+      background: var(--bg-surface);
+      color: var(--ink);
+      box-shadow: var(--shadow-card);
     }
 
     .profile-stats-grid {
@@ -380,7 +577,7 @@
     .google-signin-button {
       display: inline-block;
       background: var(--interactive);
-      color: #ffffff;
+      color: var(--on-accent);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.95rem;
@@ -462,7 +659,7 @@
 
     /* PRIMARY - sage green (Call, both Save buttons, Send). */
     .call-button {
-      color: #ffffff;
+      color: var(--on-accent);
       background: var(--accent);
       border-color: var(--accent);
     }
@@ -503,7 +700,7 @@
 
     /* PRIMARY - "Accept" is one of the four named primary actions. */
     .accept-button {
-      color: #ffffff;
+      color: var(--on-accent);
       background: var(--accent);
       border-color: var(--accent);
     }
@@ -520,7 +717,7 @@
 
     /* DANGER - "Hang Up", a different red than the Hot badge on purpose. */
     .hangup-button {
-      color: #ffffff;
+      color: var(--on-accent);
       background: var(--danger);
       border-color: var(--danger);
     }
@@ -534,6 +731,77 @@
       margin-left: var(--sp-2);
       font-size: var(--text-meta);
       color: var(--ink-muted);
+    }
+
+    /* Status/Temperature/Search controls, above the call-backs list -
+       identical component to index.html's. One row, wraps on narrow
+       screens instead of overflowing. */
+    .filter-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-3);
+      font-size: 0.9rem;
+      color: var(--ink-muted);
+    }
+
+    .filter-row select {
+      font-family: inherit;
+      font-size: var(--text-meta);
+      padding: var(--sp-1) var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      color: var(--ink);
+    }
+
+    .search-input {
+      font-family: inherit;
+      font-size: var(--text-meta);
+      padding: var(--sp-1) var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      color: var(--ink);
+      width: 200px;
+    }
+
+    .search-input:focus-visible {
+      border-color: var(--interactive);
+    }
+
+    /* Pushed to the right of the row - "Showing X of Y call-backs", so it's
+       obvious at a glance when a filter/search is narrowing the list. */
+    .filter-result-count {
+      margin-left: auto;
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+      white-space: nowrap;
+    }
+
+    /* Visually hidden but still readable by screen readers - used for the
+       search box's label, since a placeholder alone isn't enough for a11y. */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+    }
+
+    /* Shown when a filter/search combination matches nothing - explains why
+       the list's empty and offers a one-click way back. */
+    .no-match-message {
+      padding: var(--sp-5);
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+      text-align: center;
+    }
+
+    .no-match-message p {
+      margin: 0 0 var(--sp-3) 0;
     }
 
     /* ── Pagination - identical component to index.html's ──────────────── */
@@ -648,7 +916,7 @@
     }
 
     .callback-item.highlighted:hover {
-      background: #fbe6b8;
+      background: var(--warm-bg-hover);
     }
 
     .callback-item-info {
@@ -894,7 +1162,15 @@
       </nav>
     </div>
     <div class="user-bar">
-      <button id="userBarName" type="button" class="user-name-button"></button>
+      <!-- Opens the profile panel - for a real signed-in user AND for demo
+           mode (see checkSignedIn() and the click handler below). -->
+      <button id="userBarName" type="button" class="account-button">
+        <span id="userBarAvatar" class="account-avatar"></span>
+        <span id="userBarNameText" class="account-name"></span>
+        <svg class="account-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
       <button id="signOutButton" class="sign-out-button">Sign out</button>
     </div>
   </div>
@@ -910,6 +1186,29 @@
     <h1>Call-backs</h1>
     <p class="page-subtitle">Everything due now, plus everything upcoming - soonest/most-overdue first.</p>
     <p id="deviceStatus" class="device-status">Setting up calling...</p>
+
+    <div class="filter-row">
+      <!-- Options are rebuilt from whatever Status values actually appear in
+           the sheet right now - see rebuildStatusFilterOptions() - so this
+           always reflects real data instead of a guessed-at hardcoded list. -->
+      <label for="statusFilter">Status:</label>
+      <select id="statusFilter">
+        <option value="all">All</option>
+      </select>
+
+      <label for="temperatureFilter">Temperature:</label>
+      <select id="temperatureFilter">
+        <option value="all">All</option>
+        <option value="hot">Hot</option>
+        <option value="warm">Warm</option>
+        <option value="cold">Cold</option>
+      </select>
+
+      <label for="searchInput" class="sr-only">Search call-backs</label>
+      <input type="search" id="searchInput" class="search-input" placeholder="Search name or phone…">
+
+      <span id="filterResultCount" class="filter-result-count"></span>
+    </div>
 
     <div class="card">
       <!-- Fixed-height, internally scrollable - same idea as the main
@@ -950,6 +1249,10 @@
   <script>
     const callbacksContainer = document.getElementById("callbacksContainer");
     const deviceStatus = document.getElementById("deviceStatus");
+    const statusFilter = document.getElementById("statusFilter");
+    const temperatureFilter = document.getElementById("temperatureFilter");
+    const searchInput = document.getElementById("searchInput");
+    const filterResultCount = document.getElementById("filterResultCount");
 
     // ── Call-backs list pagination ───────────────────────────────────────
     // Purely a display concern - loadCallbacksList() still fetches/combines/
@@ -962,7 +1265,8 @@
 
     let callbacksPageSize = parseInt(callbacksRowsPerPageSelect.value, 10);
     let callbacksCurrentPage = 1;
-    let callbacksAllEntries = []; // the full, already-sorted due+upcoming list
+    let callbacksAllEntries = []; // the full, already-sorted due+upcoming list, UNFILTERED
+    let callbacksFilteredEntries = []; // callbacksAllEntries after Status/Temperature/Search - see applyFilters()
 
     // ── Sign-in gate ─────────────────────────────────────────────────────
     // Same pattern on every page - see index.html's copy of this for the
@@ -970,12 +1274,28 @@
     const signInOverlay = document.getElementById("signInOverlay");
     const onboardingOverlay = document.getElementById("onboardingOverlay");
     const userBarName = document.getElementById("userBarName");
+    const userBarAvatar = document.getElementById("userBarAvatar");
+    const userBarNameText = document.getElementById("userBarNameText");
     const signOutButton = document.getElementById("signOutButton");
     const demoBanner = document.getElementById("demoBanner");
 
     // See index.html's copy of this for the full explanation - read by
     // setupCallingDevice() and the Call button handler below.
     let demoMode = false;
+
+    // Fills in the top bar's small circular avatar - see index.html's copy
+    // of this for the full explanation.
+    function setUserBarAvatar(name, picture) {
+      userBarAvatar.innerHTML = "";
+      if (picture) {
+        const img = document.createElement("img");
+        img.src = picture;
+        img.alt = "";
+        userBarAvatar.appendChild(img);
+      } else {
+        userBarAvatar.textContent = (name || "?").charAt(0).toUpperCase();
+      }
+    }
 
     // Needed so a REAL call can tell /voice (and, through it, /call-status)
     // which user's sheet to update - see index.html's copy for the full
@@ -986,6 +1306,18 @@
     // index.html's copy of this for the full explanation.
     function sheetUrlFor(sheetId) {
       return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    }
+
+    // Theme (light/dark) - see index.html's copy of this for the full
+    // explanation.
+    function applyTheme(theme) {
+      if (theme === "light" || theme === "dark") {
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("rhythmTheme", theme);
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+        localStorage.removeItem("rhythmTheme");
+      }
     }
 
     // Returns "ready" / "onboarding" / "signedOut" - see index.html's copy
@@ -1000,10 +1332,18 @@
 
         if (data.user) {
           signInOverlay.style.display = "none";
-          userBarName.textContent = data.user.name || data.user.email;
+          const displayName = data.user.name || data.user.email;
+          userBarNameText.textContent = displayName;
+          setUserBarAvatar(displayName, data.user.picture);
           userBarName.classList.add("clickable");
           signOutButton.textContent = "Sign out";
           currentUserEmail = data.user.email;
+
+          // Sync the server-persisted theme choice into this browser - see
+          // index.html's copy of this for the full explanation.
+          if (data.user.theme && data.user.theme !== localStorage.getItem("rhythmTheme")) {
+            applyTheme(data.user.theme);
+          }
 
           if (!data.user.hasSheet) {
             onboardingOverlay.style.display = "flex";
@@ -1017,8 +1357,11 @@
 
         if (demoMode) {
           signInOverlay.style.display = "none";
-          userBarName.textContent = "Demo visitor";
-          userBarName.classList.remove("clickable");
+          userBarNameText.textContent = "Demo visitor";
+          setUserBarAvatar("Demo visitor", null);
+          // Demo mode gets the profile panel too - see index.html's copy
+          // of this for the full explanation.
+          userBarName.classList.add("clickable");
           signOutButton.textContent = "Exit demo";
           return "ready";
         }
@@ -1100,43 +1443,55 @@
         profilePanelContent.appendChild(openSheetLink);
       }
 
+      // Editable for a real signed-in user; demo mode just shows the demo
+      // persona's company as plain text - see index.html's copy of this
+      // for the full explanation.
       const companyContainer = document.createElement("div");
-      const companyRow = document.createElement("div");
-      companyRow.className = "company-row";
 
-      const companyInput = document.createElement("input");
-      companyInput.type = "text";
-      companyInput.className = "company-input";
-      companyInput.placeholder = "Add your company/organisation";
-      companyInput.value = profile.company || "";
-      companyRow.appendChild(companyInput);
+      if (demoMode) {
+        const companyText = document.createElement("p");
+        companyText.style.margin = "0";
+        companyText.style.color = "var(--ink)";
+        companyText.textContent = profile.company || "(none)";
+        companyContainer.appendChild(companyText);
+      } else {
+        const companyRow = document.createElement("div");
+        companyRow.className = "company-row";
 
-      const saveCompanyButton = document.createElement("button");
-      saveCompanyButton.className = "call-button";
-      saveCompanyButton.textContent = "Save";
-      companyRow.appendChild(saveCompanyButton);
+        const companyInput = document.createElement("input");
+        companyInput.type = "text";
+        companyInput.className = "company-input";
+        companyInput.placeholder = "Add your company/organisation";
+        companyInput.value = profile.company || "";
+        companyRow.appendChild(companyInput);
 
-      companyContainer.appendChild(companyRow);
+        const saveCompanyButton = document.createElement("button");
+        saveCompanyButton.className = "call-button";
+        saveCompanyButton.textContent = "Save";
+        companyRow.appendChild(saveCompanyButton);
 
-      const companyStatus = document.createElement("span");
-      companyStatus.className = "call-status";
-      companyContainer.appendChild(companyStatus);
+        companyContainer.appendChild(companyRow);
 
-      saveCompanyButton.addEventListener("click", async () => {
-        companyStatus.textContent = "Saving...";
-        try {
-          const response = await fetch("/api/profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ company: companyInput.value }),
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Could not save company.");
-          companyStatus.textContent = "Saved.";
-        } catch (error) {
-          companyStatus.textContent = "Error: " + error.message;
-        }
-      });
+        const companyStatus = document.createElement("span");
+        companyStatus.className = "call-status";
+        companyContainer.appendChild(companyStatus);
+
+        saveCompanyButton.addEventListener("click", async () => {
+          companyStatus.textContent = "Saving...";
+          try {
+            const response = await fetch("/api/profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ company: companyInput.value }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not save company.");
+            companyStatus.textContent = "Saved.";
+          } catch (error) {
+            companyStatus.textContent = "Error: " + error.message;
+          }
+        });
+      }
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
@@ -1167,11 +1522,48 @@
 
       profilePanelContent.appendChild(makeSection("All-time stats", statsGrid));
 
+      // Theme - see index.html's copy of this for the full explanation.
+      const themeGroup = document.createElement("div");
+      themeGroup.className = "theme-toggle-group";
+
+      const currentTheme = localStorage.getItem("rhythmTheme") || "system";
+
+      [
+        { value: "system", label: "System" },
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
+      ].forEach(({ value, label }) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "theme-toggle-button" + (value === currentTheme ? " active" : "");
+        button.textContent = label;
+        button.addEventListener("click", async () => {
+          applyTheme(value);
+          Array.from(themeGroup.children).forEach((btn) => btn.classList.remove("active"));
+          button.classList.add("active");
+
+          if (!demoMode) {
+            try {
+              await fetch("/api/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ theme: value }),
+              });
+            } catch (error) {
+              // Non-critical - the local choice still works for this browser.
+            }
+          }
+        });
+        themeGroup.appendChild(button);
+      });
+
+      profilePanelContent.appendChild(makeSection("Theme", themeGroup));
+
       const signOutRow = document.createElement("div");
       signOutRow.className = "profile-signout-row";
       const signOutInPanel = document.createElement("button");
       signOutInPanel.className = "btn-secondary";
-      signOutInPanel.textContent = "Sign out";
+      signOutInPanel.textContent = demoMode ? "Exit demo" : "Sign out";
       signOutInPanel.addEventListener("click", handleSignOut);
       signOutRow.appendChild(signOutInPanel);
       profilePanelContent.appendChild(signOutRow);
@@ -1193,8 +1585,7 @@
     }
 
     userBarName.addEventListener("click", () => {
-      if (demoMode) return;
-      openProfilePanel();
+      openProfilePanel(); // works in demo mode too - see renderProfilePanel()
     });
 
     // Call-backs must be spaced at least this many minutes apart - same
@@ -2121,28 +2512,177 @@
       callbacksNextPageButton.disabled = callbacksCurrentPage >= totalPages;
     }
 
-    // Draws whichever page of callbacksAllEntries is currently selected into
-    // #callbacksContainer. Always clears and rebuilds the SAME container
-    // element (never replaces it), so this can safely be called again every
-    // time the page or rows-per-page changes.
+    // Draws whichever page of callbacksFilteredEntries (the Status/
+    // Temperature/Search result - see applyFilters()) is currently selected
+    // into #callbacksContainer. Always clears and rebuilds the SAME
+    // container element (never replaces it), so this can safely be called
+    // again every time the page or rows-per-page changes.
     function renderCallbacksPage() {
-      updateCallbacksPaginationBar(callbacksAllEntries.length);
+      updateCallbacksPaginationBar(callbacksFilteredEntries.length);
 
       callbacksContainer.innerHTML = "";
 
-      if (callbacksAllEntries.length === 0) {
+      if (callbacksFilteredEntries.length === 0) {
+        // Only reached when there's truly nothing at all (no filters
+        // narrowing anything) - a non-empty list narrowed to zero shows
+        // renderNoFilterMatchesState() instead - see applyFilters().
         callbacksContainer.textContent = "No call-backs due or scheduled right now.";
         return;
       }
 
       const pageStart = (callbacksCurrentPage - 1) * callbacksPageSize;
-      const pageEntries = callbacksAllEntries.slice(pageStart, pageStart + callbacksPageSize);
+      const pageEntries = callbacksFilteredEntries.slice(pageStart, pageStart + callbacksPageSize);
 
       const list = document.createElement("div");
       list.className = "callback-list";
       pageEntries.forEach((entry) => list.appendChild(createCallbackItem(entry)));
       callbacksContainer.appendChild(list);
     }
+
+    // Shown when the Status/Temperature/Search controls match zero entries
+    // out of a non-empty list (as opposed to the plain "nothing due or
+    // scheduled" message above) - makes clear this is a filtering result,
+    // with one click back out.
+    function renderNoFilterMatchesState() {
+      updateCallbacksPaginationBar(0);
+      callbacksContainer.innerHTML = "";
+
+      const panel = document.createElement("div");
+      panel.className = "no-match-message";
+
+      const text = document.createElement("p");
+      text.textContent = "No call-backs match the current filters.";
+      panel.appendChild(text);
+
+      const clearButton = document.createElement("button");
+      clearButton.type = "button";
+      clearButton.className = "btn-secondary";
+      clearButton.textContent = "Clear filters";
+      clearButton.addEventListener("click", clearAllFilters);
+      panel.appendChild(clearButton);
+
+      callbacksContainer.appendChild(panel);
+    }
+
+    // ── Status / Temperature / Search filtering ─────────────────────────
+    // Same idea as index.html's leads table filtering - purely client-side
+    // against the already-fetched callbacksAllEntries, all three AND
+    // together.
+
+    // The canonical pipeline order - see index.html's copy of this for the
+    // full explanation. Used only to sort the Status dropdown's options.
+    const CANONICAL_STAGE_ORDER = ["New", "Interested", "Follow-up", "Not Interested", "Closed/Won"];
+
+    function getDistinctStatuses(entries) {
+      const present = new Set();
+      entries.forEach((entry) => {
+        if (entry.status) present.add(entry.status);
+      });
+
+      const known = CANONICAL_STAGE_ORDER.filter((stage) => present.has(stage));
+      const unknown = Array.from(present)
+        .filter((status) => !CANONICAL_STAGE_ORDER.includes(status))
+        .sort();
+
+      return known.concat(unknown);
+    }
+
+    // Rebuilds the Status dropdown from the actual data, keeping the rep's
+    // current selection if it's still valid - see index.html's copy of
+    // this for the full explanation.
+    function rebuildStatusFilterOptions() {
+      const previousValue = statusFilter.value;
+
+      statusFilter.innerHTML = '<option value="all">All</option>';
+      getDistinctStatuses(callbacksAllEntries).forEach((status) => {
+        const option = document.createElement("option");
+        option.value = status;
+        option.textContent = status;
+        statusFilter.appendChild(option);
+      });
+
+      const stillValid = Array.from(statusFilter.options).some((option) => option.value === previousValue);
+      statusFilter.value = stillValid ? previousValue : "all";
+    }
+
+    // Same 0-5 -> hot/warm/cold boundaries as index.html's temperatureBand()
+    // and this page's own renderTemperatureBadge() above.
+    function temperatureBand(temperatureValue) {
+      if (temperatureValue === null || temperatureValue === undefined) return null;
+      if (temperatureValue >= 4) return "hot";
+      if (temperatureValue >= 2) return "warm";
+      return "cold";
+    }
+
+    // Case-insensitive partial name match OR digits-only partial phone
+    // match - see index.html's leadMatchesSearch() for the full explanation.
+    function entryMatchesSearch(entry, query) {
+      if (!query) return true;
+
+      const nameMatch = (entry.name || "").toLowerCase().includes(query.toLowerCase());
+
+      const queryDigits = query.replace(/\D/g, "");
+      const phoneMatch = queryDigits.length > 0 && (entry.phone || "").replace(/\D/g, "").includes(queryDigits);
+
+      return nameMatch || phoneMatch;
+    }
+
+    function updateFilterResultCount(shownCount, totalCount) {
+      filterResultCount.textContent = totalCount > 0 ? `Showing ${shownCount} of ${totalCount} call-backs` : "";
+    }
+
+    // Re-filters callbacksAllEntries into callbacksFilteredEntries using
+    // whatever the Status/Temperature dropdowns and search box are
+    // currently set to, then renders. Called after every load and every
+    // time one of the controls changes.
+    function applyFilters() {
+      const statusValue = statusFilter.value;
+      const temperatureValue = temperatureFilter.value;
+      const searchQuery = searchInput.value.trim();
+
+      callbacksFilteredEntries = callbacksAllEntries.filter((entry) => {
+        if (statusValue !== "all" && entry.status !== statusValue) return false;
+        if (temperatureValue !== "all" && temperatureBand(entry.temperatureValue) !== temperatureValue) return false;
+        if (!entryMatchesSearch(entry, searchQuery)) return false;
+        return true;
+      });
+
+      updateFilterResultCount(callbacksFilteredEntries.length, callbacksAllEntries.length);
+
+      if (callbacksFilteredEntries.length === 0 && callbacksAllEntries.length > 0) {
+        renderNoFilterMatchesState();
+      } else {
+        renderCallbacksPage();
+      }
+    }
+
+    // Resets all three controls at once - the "Clear filters" action shown
+    // inside renderNoFilterMatchesState() above.
+    function clearAllFilters() {
+      statusFilter.value = "all";
+      temperatureFilter.value = "all";
+      searchInput.value = "";
+      callbacksCurrentPage = 1;
+      applyFilters();
+    }
+
+    // A genuine filter/search change jumps back to page 1 - the previously
+    // filtered set's page 4 might not exist in the newly filtered set.
+    function onFilterControlChanged() {
+      callbacksCurrentPage = 1;
+      applyFilters();
+    }
+
+    statusFilter.addEventListener("change", onFilterControlChanged);
+    temperatureFilter.addEventListener("change", onFilterControlChanged);
+
+    // Search re-renders on a short debounce rather than every keystroke -
+    // see index.html's copy of this for the full explanation.
+    let searchDebounceTimer = null;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(onFilterControlChanged, 200);
+    });
 
     callbacksRowsPerPageSelect.addEventListener("change", () => {
       callbacksPageSize = parseInt(callbacksRowsPerPageSelect.value, 10);
@@ -2158,7 +2698,7 @@
     });
 
     callbacksNextPageButton.addEventListener("click", () => {
-      const totalPages = Math.max(1, Math.ceil(callbacksAllEntries.length / callbacksPageSize));
+      const totalPages = Math.max(1, Math.ceil(callbacksFilteredEntries.length / callbacksPageSize));
       if (callbacksCurrentPage < totalPages) {
         callbacksCurrentPage++;
         renderCallbacksPage();
@@ -2180,11 +2720,14 @@
         const upcoming = getUpcomingCallbacks(allLeads);
 
         // Normalize both into the same shape, so createCallbackItem doesn't
-        // need to know or care which list an entry came from.
+        // need to know or care which list an entry came from. Status comes
+        // from the full lead record (/api/leads/due doesn't include it) -
+        // used only by the Status filter below, not shown in the item itself.
         const dueEntries = dueLeads.map((lead) => ({
           name: lead.name,
           phone: lead.phone,
           temperatureValue: lead.temperatureValue,
+          status: (findFullLeadByPhone(lead.phone) || {}).Status || "",
           reason: lead.reason,
           highlighted: true, // due leads are always highlighted
         }));
@@ -2193,6 +2736,7 @@
           name: item.name,
           phone: item.phone,
           temperatureValue: item.temperatureValue,
+          status: (findFullLeadByPhone(item.phone) || {}).Status || "",
           reason: `Scheduled for ${formatScheduledTime(item.callBackDate)}`,
           // Upcoming ones only get highlighted once they're within the
           // reminder window (1 hour) - further-out ones stay calm.
@@ -2200,7 +2744,12 @@
         }));
 
         callbacksAllEntries = dueEntries.concat(upcomingEntries);
-        renderCallbacksPage();
+
+        // Rebuild the Status dropdown from this fresh data (keeping the
+        // rep's current selection if still valid), then apply whatever the
+        // filters/search are currently set to.
+        rebuildStatusFilterOptions();
+        applyFilters();
       } catch (error) {
         callbacksContainer.textContent = "Couldn't load call-backs right now. Please check the server and try again.";
       }
