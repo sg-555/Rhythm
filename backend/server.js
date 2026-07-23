@@ -574,6 +574,15 @@ app.post("/api/onboarding/create-sheet", async (req, res) => {
     return res.status(401).json({ error: "Not signed in.", reauthRequired: true });
   }
 
+  // Idempotency guard: if this user already has a sheet, hand back that
+  // SAME one instead of creating another. Without this, hitting the
+  // endpoint twice (e.g. a double-click, or the onboarding screen briefly
+  // reappearing for someone who already onboarded) would silently create a
+  // second "Rhythm Leads" sheet and orphan the first one in their Drive.
+  if (user.sheetId) {
+    return res.json({ success: true, sheetId: user.sheetId });
+  }
+
   try {
     const sheetId = await createRhythmSheetForUser(user);
     updateUserSheetId(user.email, sheetId);
@@ -1862,6 +1871,69 @@ function computeAnalytics(calls) {
   };
 }
 
+// ── Leads view (how many LEADS, not calls, have been reached) ───────────
+// The Calls view above counts CALLS. This counts LEADS instead - every
+// current lead in the sheet is put into exactly ONE bucket, based on their
+// calls within the SAME filtered date/time window as the Calls view, so
+// switching the dashboard's toggle never uses a different time range.
+//
+// leads: [{ name, phone }] - every lead as it exists in the sheet RIGHT NOW.
+// filteredCalls: the call log, already narrowed by filterCallLog() above.
+//
+// Returns four lists (arrays of leads), used both for the Leads view's
+// summary counts and for the "drill down to the Leads page" endpoint below:
+//   reached          - at least one CONNECTED call in the window
+//   neverReached      - at least one call, but never connected, in the window
+//   notYetCalled     - zero calls at all in the window
+//   notConnectedCalls - at least one not-connected call in the window (this
+//                       one is a CALLS-view idea, so it can OVERLAP with
+//                       "reached" - e.g. a lead who was missed once then
+//                       connected on a later try. It's only used for the
+//                       Calls view's "Not-connected calls" drill-down, never
+//                       for the Leads view's three mutually-exclusive buckets.
+function computeLeadReachBuckets(leads, filteredCalls) {
+  // One pass over the calls, grouped by phone (digits-only, so formatting
+  // differences between the sheet and the call log - "+91 98..." vs
+  // "9198..." - never cause a mismatch) - much faster than re-scanning the
+  // whole call log once per lead.
+  const callCountsByPhone = new Map();
+  filteredCalls.forEach((call) => {
+    const key = normalizePhoneNumber(call.phone);
+    if (!callCountsByPhone.has(key)) {
+      callCountsByPhone.set(key, { connectedCount: 0, notConnectedCount: 0 });
+    }
+    const counts = callCountsByPhone.get(key);
+    if (call.connected) counts.connectedCount++;
+    else counts.notConnectedCount++;
+  });
+
+  const reached = [];
+  const neverReached = [];
+  const notYetCalled = [];
+  const notConnectedCalls = [];
+
+  leads.forEach((lead) => {
+    const counts = callCountsByPhone.get(normalizePhoneNumber(lead.phone));
+
+    if (!counts) {
+      notYetCalled.push(lead);
+      return;
+    }
+
+    if (counts.connectedCount > 0) {
+      reached.push(lead);
+    } else {
+      neverReached.push(lead);
+    }
+
+    if (counts.notConnectedCount > 0) {
+      notConnectedCalls.push(lead);
+    }
+  });
+
+  return { reached, neverReached, notYetCalled, notConnectedCalls };
+}
+
 // GET /api/analytics: computes call-log-based analytics for the dashboard.
 // Optional query params:
 //   ?from=2026-07-01&to=2026-07-10   - date range (either end can be omitted)
@@ -1895,6 +1967,13 @@ app.get("/api/analytics", async (req, res) => {
     let callbacksDueNow = 0;
     let callbacksUpcoming = 0;
 
+    // The Leads-view summary the dashboard's Calls/Leads toggle switches
+    // to - see computeLeadReachBuckets() above. Defaults to all-zero if the
+    // sheet can't be read (e.g. not onboarded yet), same fallback as
+    // callbacksDueNow/Upcoming above - one failure here shouldn't break the
+    // whole dashboard.
+    let leadsView = { totalLeads: 0, reached: 0, neverReached: 0, notYetCalled: 0, contactRate: 0 };
+
     try {
       const { sheets, sheetId } = await getSheetsContextForRequest(req);
       const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
@@ -1907,10 +1986,16 @@ app.get("/api/analytics", async (req, res) => {
       const firstConnectedCol = getColumnIndex(headers, "firstConnected");
       const now = new Date();
 
+      // Collected here so the SAME loop that already reads every row can
+      // also feed the Leads-view buckets below - no second pass over the sheet.
+      const currentLeads = [];
+
       dataRows.forEach((row) => {
         const name = row[nameCol] || "";
         const phone = row[phoneCol] || "";
         if (!name && !phone) return; // skip blank rows
+
+        currentLeads.push({ name, phone });
 
         const temperatureValue = parseTemperatureValue(row[temperatureCol]);
         const due = computeCallbackDue(
@@ -1931,14 +2016,105 @@ app.get("/api/analytics", async (req, res) => {
           if (!isNaN(callBackDate) && callBackDate > now) callbacksUpcoming++;
         }
       });
+
+      // Classify every current lead using the SAME filtered call log as the
+      // Calls view above, so toggling the dashboard never changes the time
+      // range being looked at.
+      const buckets = computeLeadReachBuckets(currentLeads, filtered);
+      const reachedCount = buckets.reached.length;
+      const neverReachedCount = buckets.neverReached.length;
+      const attemptedCount = reachedCount + neverReachedCount; // leads actually called at least once
+
+      leadsView = {
+        totalLeads: currentLeads.length,
+        reached: reachedCount,
+        neverReached: neverReachedCount,
+        notYetCalled: buckets.notYetCalled.length,
+        // "Contact rate": of leads actually attempted, how many were
+        // reached - DIFFERENT question from Pick-up rate (which is about
+        // calls, not leads) - see analytics.html for where this is labeled.
+        contactRate: attemptedCount > 0 ? reachedCount / attemptedCount : 0,
+      };
     } catch (error) {
-      console.error("Could not compute call-back pipeline counts:", error.message);
+      console.error("Could not compute call-back pipeline / leads-view counts:", error.message);
     }
 
-    res.json({ ...analytics, callbacksDueNow, callbacksUpcoming });
+    res.json({ ...analytics, callbacksDueNow, callbacksUpcoming, leadsView });
   } catch (error) {
     console.error("Failed to compute analytics:", error.message);
     res.status(500).json({ error: "Failed to compute analytics." });
+  }
+});
+
+// GET /api/analytics/drilldown: given one of the Analytics dashboard's
+// clickable metrics (a "bucket") plus the SAME date/time filters already
+// applied there, returns exactly which LEADS are behind that metric. This
+// is what powers "click a metric, jump to the Leads page already filtered"-
+// Analytics counts CALLS, but the Leads page lists LEADS, so this resolves
+// a metric back to the distinct leads behind it (see computeLeadReachBuckets).
+//
+// Query params: bucket (required) + the same from/to/hourFrom/hourTo as
+// GET /api/analytics.
+//   bucket=connected          - leads with >=1 connected call (Calls view's
+//                                "Connected calls" AND Leads view's "Reached"
+//                                are the exact same set of leads)
+//   bucket=notConnectedCalls  - leads with >=1 not-connected call (Calls
+//                                view's "Not-connected calls" - can overlap
+//                                with "connected", since a lead can have
+//                                both outcomes across different attempts)
+//   bucket=neverReached       - leads with >=1 call, but never connected
+//   bucket=notYetCalled       - leads with zero calls in the window
+app.get("/api/analytics/drilldown", async (req, res) => {
+  try {
+    const bucket = req.query.bucket;
+    const validBuckets = ["connected", "notConnectedCalls", "neverReached", "notYetCalled"];
+    if (!validBuckets.includes(bucket)) {
+      return res.status(400).json({ error: "Unknown or missing 'bucket' parameter." });
+    }
+
+    const log = loadCallLog(callLogPathForRequest(req));
+    const fromDate = req.query.from ? new Date(req.query.from + "T00:00:00") : null;
+    const toDate = req.query.to ? new Date(req.query.to + "T23:59:59") : null;
+    const hourFrom = req.query.hourFrom !== undefined ? parseInt(req.query.hourFrom, 10) : null;
+    const hourTo = req.query.hourTo !== undefined ? parseInt(req.query.hourTo, 10) : null;
+    const filtered = filterCallLog(log, { fromDate, toDate, hourFrom, hourTo });
+
+    const { sheets, sheetId } = await getSheetsContextForRequest(req);
+    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
+    const nameCol = getColumnIndex(headers, "name");
+    const phoneCol = getColumnIndex(headers, "phone");
+
+    const currentLeads = dataRows
+      .map((row) => ({ name: row[nameCol] || "", phone: row[phoneCol] || "" }))
+      .filter((lead) => lead.name || lead.phone);
+
+    const buckets = computeLeadReachBuckets(currentLeads, filtered);
+    const matchedLeads = buckets[bucket === "connected" ? "reached" : bucket];
+
+    // "callCount" is the number of CALLS behind this bucket (as opposed to
+    // leadCount, the number of distinct LEADS) - this is what lets the
+    // Leads page's filter chip say something like "60 leads from 168
+    // calls", so the difference between call counts and lead counts is
+    // obvious rather than looking like a bug.
+    const matchedPhones = new Set(matchedLeads.map((lead) => normalizePhoneNumber(lead.phone)));
+    let callCount;
+    if (bucket === "connected") {
+      callCount = filtered.filter((call) => call.connected && matchedPhones.has(normalizePhoneNumber(call.phone))).length;
+    } else if (bucket === "notYetCalled") {
+      callCount = 0; // by definition - these leads have no calls in the window
+    } else {
+      // "notConnectedCalls" and "neverReached" both mean "count the
+      // not-connected calls to these specific leads".
+      callCount = filtered.filter((call) => !call.connected && matchedPhones.has(normalizePhoneNumber(call.phone))).length;
+    }
+
+    res.json({
+      phones: matchedLeads.map((lead) => lead.phone),
+      leadCount: matchedLeads.length,
+      callCount,
+    });
+  } catch (error) {
+    handleSheetsError(res, error);
   }
 });
 

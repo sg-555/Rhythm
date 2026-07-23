@@ -39,6 +39,12 @@
        getComputedStyle(), so Chart.js automatically follows whichever mode
        is active - see renderCharts(). */
     :root {
+      /* Tells the browser to render NATIVE form controls (the
+         datetime-local picker used for call-backs, <select> dropdowns,
+         scrollbars) in light chrome, matching this theme - without this,
+         they silently keep using whatever the OS default is, which can
+         look wrong/low-contrast against a differently-themed page. */
+      color-scheme: light;
       /* Warm paper backgrounds - not cool grey */
       --bg-page: #FAF9F7;
       --bg-subtle: #F0ECE5;
@@ -47,26 +53,44 @@
       --hot-bg-hover: #F8D4CF;
       --warm-bg-hover: #FBE6B8;
 
-      /* A warm near-black for real contrast, not a mid-grey or a cool slate */
+      /* A warm near-black for real contrast, not a mid-grey or a cool slate.
+         --ink-faint was darkened during the dark-mode contrast sweep - see
+         index.html's copy of this token for the full explanation. */
       --ink: #211D18;
       --ink-muted: #6E6459;
-      --ink-faint: #948C7F;
+      --ink-faint: #7A6F60;
       --border: #E4DFD6;
       --border-strong: #D2CABC;
 
-      /* Slate blue stays reserved for structure/interactive chrome. */
+      /* Slate blue stays reserved for structure/interactive chrome - kept
+         at its original brightness (see index.html's copy of this token
+         for why: it's reused as text/border/focus color, so darkening it
+         for button contrast would have broken that instead). */
       --interactive: #4A90E2;
-      --interactive-hover: #3A7BC8;
+      /* Lightened for its one use (Sign-in/"Open my sheet" button hover) -
+         see index.html's copy of this token for why. */
+      --interactive-hover: #6AA3E7;
       --interactive-bg: #EAF2FC;
+      /* Text-on-tint for the interactive blue - added during the dark-mode
+         contrast sweep, see index.html's copy of this token for why. */
+      --interactive-ink: #2A64AB;
+      /* Dark ink for text on a solid --interactive fill - added during the
+         primary-button contrast fix, see index.html's copy of this token
+         for the full explanation. */
+      --on-interactive: #211D18;
 
-      /* Sage green stays STRICTLY for primary actions/success. */
-      --accent: #2ECC71;
-      --accent-hover: #27AE60;
+      /* Sage green stays STRICTLY for primary actions/success. Darkened
+         during the primary-button contrast fix - see index.html's copy of
+         this token for why (same hue/saturation, just deeper). */
+      --accent: #1E8549;
+      --accent-hover: #186839;
       --accent-ink: #1B7943;
       --accent-bg: #E9F9EF;
 
-      --danger: #E5484D;
-      --danger-hover: #CC3D42;
+      /* Darkened for the same reason as --accent above - same hue as
+         before, so still just as distinct from the Hot badge. */
+      --danger: #E0292F;
+      --danger-hover: #C91D22;
       --danger-bg: #FDECEC;
 
       /* Temperature colours - a touch more saturated than the warm neutral
@@ -107,6 +131,9 @@
        pages. */
     @media (prefers-color-scheme: dark) {
       :root {
+        /* Same idea as :root's color-scheme above, but for when the OS
+           itself prefers dark - native form controls should follow. */
+        color-scheme: dark;
         --bg-page: #1A1714;
         --bg-subtle: #2A241D;
         --bg-surface: #221E1A;
@@ -116,11 +143,12 @@
 
         --ink: #EDE6DA;
         --ink-muted: #A89C8B;
-        --ink-faint: #8A8071;
+        --ink-faint: #948A7A;
         --border: #342E26;
         --border-strong: #453D32;
 
         --interactive-bg: #202836;
+        --interactive-ink: #7DAEEA;
         --accent-ink: #6FDB9E;
         --accent-bg: #182A20;
         --danger-bg: #3A1A1B;
@@ -142,6 +170,9 @@
        regardless of OS setting, set by applyTheme(). Same values as the
        media query block. */
     html[data-theme="dark"] {
+      /* Same idea as :root's color-scheme above, but forced to dark
+         regardless of the OS setting - this is the manual override. */
+      color-scheme: dark;
       --bg-page: #1A1714;
       --bg-subtle: #2A241D;
       --bg-surface: #221E1A;
@@ -151,11 +182,12 @@
 
       --ink: #EDE6DA;
       --ink-muted: #A89C8B;
-      --ink-faint: #8A8071;
+      --ink-faint: #948A7A;
       --border: #342E26;
       --border-strong: #453D32;
 
       --interactive-bg: #202836;
+      --interactive-ink: #7DAEEA;
       --accent-ink: #6FDB9E;
       --accent-bg: #182A20;
       --danger-bg: #3A1A1B;
@@ -175,6 +207,9 @@
     /* Forces LIGHT even if the OS prefers dark - just re-states the :root
        (light) values, so it always wins over the dark media query above. */
     html[data-theme="light"] {
+      /* Same idea as :root's color-scheme above, but forced to light
+         regardless of the OS setting - this is the manual override. */
+      color-scheme: light;
       --bg-page: #FAF9F7;
       --bg-subtle: #F0ECE5;
       --bg-surface: #FFFFFF;
@@ -184,11 +219,12 @@
 
       --ink: #211D18;
       --ink-muted: #6E6459;
-      --ink-faint: #948C7F;
+      --ink-faint: #7A6F60;
       --border: #E4DFD6;
       --border-strong: #D2CABC;
 
       --interactive-bg: #EAF2FC;
+      --interactive-ink: #2A64AB;
       --accent-ink: #1B7943;
       --accent-bg: #E9F9EF;
       --danger-bg: #FDECEC;
@@ -219,6 +255,14 @@
     :focus-visible {
       outline: 2px solid var(--interactive);
       outline-offset: 2px;
+    }
+
+    /* Every placeholder on every input, in one place - see index.html's
+       copy of this for the full explanation (browser default placeholder
+       grey doesn't follow the theme, and Firefox dims it further by default). */
+    ::placeholder {
+      color: var(--ink-faint);
+      opacity: 1;
     }
 
     /* Same basic page setup as the other pages, so all three feel consistent */
@@ -529,7 +573,7 @@
       display: inline-block;
       margin-bottom: var(--sp-3);
       background: var(--interactive);
-      color: var(--on-accent);
+      color: var(--on-interactive);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.85rem;
@@ -698,7 +742,7 @@
     .google-signin-button {
       display: inline-block;
       background: var(--interactive);
-      color: var(--on-accent);
+      color: var(--on-interactive);
       text-decoration: none;
       font-weight: 600;
       font-size: 0.95rem;
@@ -778,6 +822,40 @@
       color: var(--ink);
     }
 
+    /* ── Calls / Leads toggle - same segmented-control look as the profile
+       panel's theme toggle, so the app stays visually consistent. */
+    .metrics-view-toggle {
+      display: inline-flex;
+      gap: var(--sp-1);
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-1);
+      margin-bottom: var(--sp-4);
+    }
+
+    .view-toggle-button {
+      font-family: inherit;
+      font-size: var(--text-meta);
+      font-weight: 600;
+      color: var(--ink-muted);
+      background: transparent;
+      border: none;
+      border-radius: var(--radius-sm);
+      padding: var(--sp-2) var(--sp-4);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+    }
+
+    .view-toggle-button:hover {
+      color: var(--ink);
+    }
+
+    .view-toggle-button.active {
+      background: var(--bg-surface);
+      color: var(--ink);
+      box-shadow: var(--shadow-card);
+    }
+
     /* ── Metric tiles ────────────────────────────────────────────────── */
     .metrics-row {
       display: grid;
@@ -793,6 +871,32 @@
       padding: var(--sp-4) var(--sp-5);
     }
 
+    /* Some metric tiles are actual <button> elements (the ones that drill
+       down to the Leads page) - this resets the browser's default button
+       look so they still match the plain <div> tiles exactly, then adds a
+       pointer cursor + visible hover/focus so it's obvious they're
+       clickable ("not secretly clickable"). */
+    .metric-tile-clickable {
+      display: block;
+      width: 100%;
+      font: inherit;
+      text-align: left;
+      color: inherit;
+      appearance: none;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: border-color var(--transition);
+    }
+
+    .metric-tile-clickable:hover {
+      border-color: var(--interactive);
+    }
+
+    .metric-tile-clickable:focus-visible {
+      outline: 2px solid var(--interactive);
+      outline-offset: 2px;
+    }
+
     .metric-value {
       font-family: var(--font-display);
       font-size: 1.75rem;
@@ -804,6 +908,15 @@
 
     .metric-label {
       margin-top: var(--sp-1);
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+    }
+
+    /* The Leads view's "39 reached + 3 never reached + 0 not yet called =
+       42 total leads" line - sits right under that row, explaining the
+       reconciliation in plain words. */
+    .metrics-reconciliation {
+      margin: calc(-1 * var(--sp-3)) 0 var(--sp-5) 0;
       font-size: var(--text-meta);
       color: var(--ink-muted);
     }
@@ -937,20 +1050,33 @@
       </div>
     </div>
 
-    <!-- ── Key metrics ──────────────────────────────────────────────────── -->
-    <div class="metrics-row">
+    <!-- ── Calls / Leads toggle ────────────────────────────────────────────
+         Switches the WHOLE dashboard (metrics below AND the charts further
+         down) between two ways of looking at the SAME filtered data - see
+         setMetricsView(). Calls view counts CALLS; Leads view counts LEADS.
+         They're never mixed - only one row of metrics is visible at a time. -->
+    <div class="metrics-view-toggle" id="metricsViewToggle">
+      <button type="button" class="view-toggle-button active" data-view="calls">Calls</button>
+      <button type="button" class="view-toggle-button" data-view="leads">Leads</button>
+    </div>
+
+    <!-- ── Key metrics: CALLS view (default) ───────────────────────────────
+         Unchanged from before - counts calls, not leads. Connected/Not
+         connected are clickable - see attachMetricDrilldowns() - jumping to
+         the Leads page already filtered to the leads behind that count. -->
+    <div class="metrics-row" id="callsMetricsRow">
       <div class="metric-tile">
         <div class="metric-value" id="metricTotalCalls">-</div>
         <div class="metric-label">Total calls</div>
       </div>
-      <div class="metric-tile">
+      <button type="button" class="metric-tile metric-tile-clickable" data-bucket="connected">
         <div class="metric-value" id="metricConnected">-</div>
         <div class="metric-label">Connected</div>
-      </div>
-      <div class="metric-tile">
+      </button>
+      <button type="button" class="metric-tile metric-tile-clickable" data-bucket="notConnectedCalls">
         <div class="metric-value" id="metricNotConnected">-</div>
         <div class="metric-label">Not connected</div>
-      </div>
+      </button>
       <div class="metric-tile">
         <div class="metric-value" id="metricPickupRate">-</div>
         <div class="metric-label">Pick-up rate</div>
@@ -961,27 +1087,67 @@
       </div>
     </div>
 
+    <!-- ── Key metrics: LEADS view (new) ────────────────────────────────────
+         Three MUTUALLY EXCLUSIVE buckets (every lead is in exactly one of
+         Reached/Never reached/Not yet called) - all three are clickable.
+         Hidden by default - see setMetricsView(). -->
+    <div class="metrics-row" id="leadsMetricsRow" style="display: none;">
+      <div class="metric-tile">
+        <div class="metric-value" id="metricTotalLeads">-</div>
+        <div class="metric-label">Total leads</div>
+      </div>
+      <button type="button" class="metric-tile metric-tile-clickable" data-bucket="connected">
+        <div class="metric-value" id="metricReached">-</div>
+        <div class="metric-label">Reached</div>
+      </button>
+      <button type="button" class="metric-tile metric-tile-clickable" data-bucket="neverReached">
+        <div class="metric-value" id="metricNeverReached">-</div>
+        <div class="metric-label">Never reached</div>
+      </button>
+      <button type="button" class="metric-tile metric-tile-clickable" data-bucket="notYetCalled">
+        <div class="metric-value" id="metricNotYetCalled">-</div>
+        <div class="metric-label">Not yet called</div>
+      </button>
+      <div class="metric-tile">
+        <div class="metric-value" id="metricContactRate">-</div>
+        <!-- Deliberately a DIFFERENT label from "Pick-up rate" above - this
+             measures pipeline coverage (leads), not dialing efficiency (calls). -->
+        <div class="metric-label">Contact rate</div>
+      </div>
+    </div>
+
+    <!-- Makes the Leads view's three buckets add up in plain words, so the
+         numbers explain themselves instead of needing to be double-checked
+         by hand - see renderMetrics(). Only shown in Leads view. -->
+    <p class="metrics-reconciliation" id="metricsReconciliation" style="display: none;"></p>
+
     <!-- ── Charts ───────────────────────────────────────────────────────── -->
-    <!-- Shown INSTEAD of the charts when there's no data for the current
-         filter - keeps the canvas elements below untouched, so switching back
-         to a filter WITH data still works (see showChartsEmptyState). -->
-    <p id="chartsEmptyMessage" class="message" style="display: none;"></p>
+    <!-- All three charts describe CALLS (outcomes, timing, temperature-at-
+         call-time), so they only make sense in Calls view - the whole
+         section hides in Leads view instead of showing call-shaped charts
+         next to lead-shaped numbers (see setMetricsView() - "never mix"). -->
+    <div id="chartsSection">
+      <!-- Shown INSTEAD of the charts when there's no data for the current
+           filter - keeps the canvas elements below untouched, so switching back
+           to a filter WITH data still works (see showChartsEmptyState). -->
+      <p id="chartsEmptyMessage" class="message" style="display: none;"></p>
 
-    <div class="charts-row" id="chartsRow">
-      <div class="card chart-card">
-        <h2>Hot / Warm / Cold split</h2>
-        <div class="chart-box"><canvas id="temperatureChart"></canvas></div>
-        <ul class="chart-legend-list" id="temperatureLegend"></ul>
-      </div>
+      <div class="charts-row" id="chartsRow">
+        <div class="card chart-card">
+          <h2>Hot / Warm / Cold split</h2>
+          <div class="chart-box"><canvas id="temperatureChart"></canvas></div>
+          <ul class="chart-legend-list" id="temperatureLegend"></ul>
+        </div>
 
-      <div class="card chart-card">
-        <h2>Calls by outcome</h2>
-        <div class="chart-box"><canvas id="outcomeChart"></canvas></div>
-      </div>
+        <div class="card chart-card">
+          <h2>Calls by outcome</h2>
+          <div class="chart-box"><canvas id="outcomeChart"></canvas></div>
+        </div>
 
-      <div class="card chart-card">
-        <h2>Pick-up rate by hour of day</h2>
-        <div class="chart-box"><canvas id="hourChart"></canvas></div>
+        <div class="card chart-card">
+          <h2>Pick-up rate by hour of day</h2>
+          <div class="chart-box"><canvas id="hourChart"></canvas></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1416,9 +1582,12 @@
       return { from: "", to: "" }; // "All time" - no date filter at all
     }
 
-    // Builds the full query string for /api/analytics from whatever the
-    // filter controls currently say.
-    function buildAnalyticsUrl() {
+    // Builds just the from/to/hourFrom/hourTo params from whatever the
+    // filter controls currently say - shared by buildAnalyticsUrl() below
+    // AND the drill-down links (see goToFilteredLeads()), so a metric's
+    // drill-down always carries the SAME filters the dashboard is
+    // currently showing.
+    function buildFilterParams() {
       const { from, to } = getDateRangeParams();
       const params = new URLSearchParams();
 
@@ -1432,7 +1601,13 @@
         params.set("hourTo", hourToInput.value);
       }
 
-      const query = params.toString();
+      return params;
+    }
+
+    // Builds the full query string for /api/analytics from whatever the
+    // filter controls currently say.
+    function buildAnalyticsUrl() {
+      const query = buildFilterParams().toString();
       return "/api/analytics" + (query ? "?" + query : "");
     }
 
@@ -1441,8 +1616,11 @@
       return `${Math.round(fraction * 100)}%`;
     }
 
-    // Fills in the five metric tiles at the top of the page.
+    // Fills in BOTH metric rows (Calls and Leads) every time - only one is
+    // actually visible at once (see setMetricsView()), but filling both now
+    // means switching the toggle later is instant, no re-fetch needed.
     function renderMetrics(data) {
+      // Calls view - unchanged from before.
       document.getElementById("metricTotalCalls").textContent = data.totalCalls;
       document.getElementById("metricConnected").textContent = data.connectedCount;
       document.getElementById("metricNotConnected").textContent = data.notConnectedCount;
@@ -1450,7 +1628,76 @@
         data.totalCalls > 0 ? formatPercent(data.pickupRate) : "-";
       document.getElementById("metricCallbacks").textContent =
         `${data.callbacksDueNow} / ${data.callbacksUpcoming}`;
+
+      // Leads view - new. leadsView always exists (defaults to all-zero on
+      // the server if the sheet couldn't be read) - see GET /api/analytics.
+      const leadsView = data.leadsView;
+      document.getElementById("metricTotalLeads").textContent = leadsView.totalLeads;
+      document.getElementById("metricReached").textContent = leadsView.reached;
+      document.getElementById("metricNeverReached").textContent = leadsView.neverReached;
+      document.getElementById("metricNotYetCalled").textContent = leadsView.notYetCalled;
+      // "Contact rate" - of leads actually attempted (reached + never
+      // reached), how many were reached. Only meaningful once at least one
+      // lead has been attempted, same "-" fallback idea as Pick-up rate.
+      const attempted = leadsView.reached + leadsView.neverReached;
+      document.getElementById("metricContactRate").textContent =
+        attempted > 0 ? formatPercent(leadsView.contactRate) : "-";
+
+      // Spells out the reconciliation in plain words, so it's obvious the
+      // three buckets above always add up to the total - never something
+      // the rep has to check by hand.
+      document.getElementById("metricsReconciliation").textContent =
+        `${leadsView.reached} reached + ${leadsView.neverReached} never reached + ` +
+        `${leadsView.notYetCalled} not yet called = ${leadsView.totalLeads} total leads`;
     }
+
+    // ── Calls / Leads toggle ─────────────────────────────────────────────
+    // "calls" (default) or "leads" - which row of metrics (and whether the
+    // charts, which are all call-shaped, show at all) is currently visible.
+    // Both rows are always kept FILLED IN (see renderMetrics above) even
+    // while hidden, so switching the toggle is instant - no re-fetch.
+    let currentMetricsView = "calls";
+
+    const callsMetricsRow = document.getElementById("callsMetricsRow");
+    const leadsMetricsRow = document.getElementById("leadsMetricsRow");
+    const metricsReconciliation = document.getElementById("metricsReconciliation");
+    const chartsSection = document.getElementById("chartsSection");
+
+    function setMetricsView(view) {
+      currentMetricsView = view;
+
+      // Highlight whichever toggle button matches the new view.
+      document.querySelectorAll(".view-toggle-button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.view === view);
+      });
+
+      const showingLeads = view === "leads";
+      callsMetricsRow.style.display = showingLeads ? "none" : "grid";
+      leadsMetricsRow.style.display = showingLeads ? "grid" : "none";
+      metricsReconciliation.style.display = showingLeads ? "block" : "none";
+      // Charts only make sense in Calls view (see the HTML comment above
+      // #chartsSection) - "never mix" the two views' numbers together.
+      chartsSection.style.display = showingLeads ? "none" : "block";
+    }
+
+    document.querySelectorAll(".view-toggle-button").forEach((button) => {
+      button.addEventListener("click", () => setMetricsView(button.dataset.view));
+    });
+
+    // ── Drill-down: click a metric, jump to the Leads page already filtered ──
+    // Carries the SAME date/time filters this dashboard currently has
+    // applied (see buildFilterParams()), plus which "bucket" was clicked -
+    // the Leads page (index.html) reads these and asks the backend
+    // (GET /api/analytics/drilldown) exactly which leads to show.
+    function goToFilteredLeads(bucket) {
+      const params = buildFilterParams();
+      params.set("bucket", bucket);
+      location.href = "index.html?" + params.toString();
+    }
+
+    document.querySelectorAll(".metric-tile-clickable").forEach((tile) => {
+      tile.addEventListener("click", () => goToFilteredLeads(tile.dataset.bucket));
+    });
 
     // Renders the Hot/Warm/Cold pie chart, plus a plain-text list of the
     // exact counts underneath (so the numbers are always visible directly
