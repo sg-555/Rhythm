@@ -136,6 +136,31 @@
       background: #1739a8;
     }
 
+    /* Secondary option on the sign-in card - links straight to GET /demo. */
+    .view-demo-button {
+      display: inline-block;
+      margin-top: 0.75rem;
+      color: #1d4ed8;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .view-demo-button:hover {
+      text-decoration: underline;
+    }
+
+    /* Always-visible strip while in DEMO MODE - see checkSignedIn(). */
+    .demo-banner {
+      display: none; /* JS switches this to "block" only in demo mode */
+      background: #fef3c7;
+      color: #92400e;
+      text-align: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.4rem;
+    }
+
     .device-status {
       font-size: 0.85rem;
       color: #57606a;
@@ -467,8 +492,13 @@
       <h1>Rhythm</h1>
       <p>Sign in with your Google account to manage your leads.</p>
       <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
+      <br />
+      <a href="/demo" class="view-demo-button">View Demo (no sign-in needed)</a>
     </div>
   </div>
+
+  <!-- Always-visible while in demo mode - see checkSignedIn(). -->
+  <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
   <!-- Same top bar on every page. This page marks "Call-backs" as active. -->
   <div class="top-bar">
@@ -511,20 +541,36 @@
     const signInOverlay = document.getElementById("signInOverlay");
     const userBarName = document.getElementById("userBarName");
     const signOutButton = document.getElementById("signOutButton");
+    const demoBanner = document.getElementById("demoBanner");
+
+    // See index.html's copy of this for the full explanation - read by
+    // setupCallingDevice() and the Call button handler below.
+    let demoMode = false;
 
     async function checkSignedIn() {
       try {
         const response = await fetch("/api/me");
         const data = await response.json();
 
-        if (!data.user) {
-          signInOverlay.style.display = "flex";
-          return false;
+        demoMode = !!data.demo;
+        demoBanner.style.display = demoMode ? "block" : "none";
+
+        if (data.user) {
+          signInOverlay.style.display = "none";
+          userBarName.textContent = data.user.name || data.user.email;
+          signOutButton.textContent = "Sign out";
+          return true;
         }
 
-        signInOverlay.style.display = "none";
-        userBarName.textContent = data.user.name || data.user.email;
-        return true;
+        if (demoMode) {
+          signInOverlay.style.display = "none";
+          userBarName.textContent = "Demo visitor";
+          signOutButton.textContent = "Exit demo";
+          return true;
+        }
+
+        signInOverlay.style.display = "flex";
+        return false;
       } catch (error) {
         signInOverlay.style.display = "flex";
         return false;
@@ -532,7 +578,7 @@
     }
 
     signOutButton.addEventListener("click", async () => {
-      await fetch("/auth/logout", { method: "POST" });
+      await fetch(demoMode ? "/demo/exit" : "/auth/logout", { method: "POST" });
       location.reload();
     });
 
@@ -652,7 +698,29 @@
 
       activeCall = null;
       activeCallPhone = null;
+      demoCallActive = false;
       refreshAllCallButtons();
+    }
+
+    // DEMO MODE: true while a fake call is "in progress" - this page has no
+    // transcript/coach panel like index.html does, so the simulation here is
+    // just a sequence of status-text changes on the Call button itself.
+    let demoCallActive = false;
+
+    function startDemoCall(phone) {
+      activeCallPhone = phone;
+      demoCallActive = true;
+      refreshAllCallButtons("Connecting...");
+
+      setTimeout(() => {
+        if (demoCallActive && activeCallPhone === phone) refreshAllCallButtons("Ringing...");
+      }, 900);
+      setTimeout(() => {
+        if (demoCallActive && activeCallPhone === phone) refreshAllCallButtons("In Call (demo)");
+      }, 2200);
+      setTimeout(() => {
+        if (demoCallActive && activeCallPhone === phone) endActiveCall("Call ended (demo) — Connected");
+      }, 6000);
     }
 
     // Wires up a Call/Hang Up button pair for one phone number. Same calling
@@ -669,15 +737,22 @@
       callButton.addEventListener("click", async (event) => {
         event.stopPropagation();
 
-        if (!device) {
-          callStatus.textContent = "Calling isn't ready yet - please wait a moment.";
-          return;
-        }
-
-        if (activeCall) {
+        if (activeCall || demoCallActive) {
           // Shouldn't normally happen, since every other lead's button is
           // disabled while a call is active - kept as a safety net.
           callStatus.textContent = "Finish your current call first.";
+          return;
+        }
+
+        // DEMO MODE: fake it - never touches device, Twilio, or any backend
+        // endpoint that could place a real call.
+        if (demoMode) {
+          startDemoCall(phone);
+          return;
+        }
+
+        if (!device) {
+          callStatus.textContent = "Calling isn't ready yet - please wait a moment.";
           return;
         }
 
@@ -698,7 +773,11 @@
 
       hangupButton.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (activeCall) activeCall.disconnect();
+        if (demoMode) {
+          endActiveCall("Call ended (demo)");
+        } else if (activeCall) {
+          activeCall.disconnect();
+        }
       });
     }
 
@@ -1458,7 +1537,10 @@
       // the combined list.
       await loadAllLeads();
       await loadCallbacksList();
-      setupCallingDevice();
+      // Never set up real Twilio calling in demo mode - see startDemoCall()
+      // above and the /api/token gate in server.js.
+      if (!demoMode) setupCallingDevice();
+      else deviceStatus.textContent = "Demo mode - calls are simulated.";
     })();
   </script>
 </body>

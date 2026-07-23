@@ -156,9 +156,15 @@ function getCurrentUser(req) {
 // Writes the session cookie onto the response. HttpOnly means page
 // JavaScript can't read it - only the browser itself sends it back to us
 // automatically on future requests.
+//
+// Uses res.append() rather than res.setHeader() - Set-Cookie is a
+// multi-value header, and setHeader() would silently REPLACE any other
+// cookie already queued on this same response (e.g. demo.js clearing the
+// demo cookie in the same request that signs someone in for real) instead
+// of adding to it.
 function setSessionCookie(res, sessionId) {
   const maxAgeSeconds = 30 * 24 * 60 * 60; // 30 days
-  res.setHeader(
+  res.append(
     "Set-Cookie",
     `${SESSION_COOKIE_NAME}=${sessionId}; HttpOnly; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`
   );
@@ -166,7 +172,7 @@ function setSessionCookie(res, sessionId) {
 
 // Clears the session cookie (used on sign-out) by making it expire immediately.
 function clearSessionCookie(res) {
-  res.setHeader("Set-Cookie", `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`);
+  res.append("Set-Cookie", `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`);
 }
 
 module.exports = {

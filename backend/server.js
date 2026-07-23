@@ -44,6 +44,7 @@ const {
   setSessionCookie,
   clearSessionCookie,
 } = require("./auth");
+const { isDemoRequest, setDemoCookie, clearDemoCookie } = require("./demo");
 
 const app = express();
 const PORT = 3000;
@@ -98,6 +99,7 @@ app.get("/auth/google/callback", async (req, res) => {
 
     const sessionId = createSession(profile.email);
     setSessionCookie(res, sessionId);
+    clearDemoCookie(res); // a real sign-in always replaces demo mode, never layers on top of it
 
     res.redirect("/"); // back to the app - now signed in
   } catch (err) {
@@ -106,11 +108,33 @@ app.get("/auth/google/callback", async (req, res) => {
   }
 });
 
-// GET /api/me: tells the frontend who (if anyone) is currently signed in.
-// Never sends tokens to the browser - just what the UI needs to show.
+// GET /api/me: tells the frontend who (if anyone) is currently signed in,
+// and whether this browser is in DEMO MODE instead. Never sends tokens to
+// the browser - just what the UI needs to show.
 app.get("/api/me", (req, res) => {
   const user = getCurrentUser(req);
-  res.json({ user: user ? { email: user.email, name: user.name } : null });
+  res.json({
+    user: user ? { email: user.email, name: user.name } : null,
+    demo: isDemoRequest(req),
+  });
+});
+
+// ── Demo Mode entry points ───────────────────────────────────────────────
+// Both the sign-in screen's "View Demo" button and visiting /demo directly
+// land here. This is the ONLY place that ever sets the demo cookie - after
+// this, every route below checks isDemoRequest() and either reads from the
+// seeded demo sheet/call-log instead of the real ones, or fakes success
+// without calling Twilio/Deepgram/Gemini at all. See the comments at each
+// of those checks for exactly what's gated and why.
+app.get("/demo", (req, res) => {
+  setDemoCookie(res);
+  res.redirect("/");
+});
+
+// POST /demo/exit: leaves demo mode (the "Exit demo" button).
+app.post("/demo/exit", (req, res) => {
+  clearDemoCookie(res);
+  res.json({ ok: true });
 });
 
 // POST /auth/logout: signs the current browser out.
@@ -156,6 +180,28 @@ const SHEET_CONFIG = {
   },
 };
 
+// Picks which Google Sheet a request should read from: the seeded DEMO
+// sheet for demo-mode visitors, or the real one for everyone else. This is
+// the key safety rule for demo mode's READ side - it must never be able to
+// see (or, elsewhere in this file, write to) the real sheet. Throws if
+// demo mode is on but DEMO_SHEET_ID hasn't been set up yet, so that shows
+// up as a clear error instead of quietly reading nothing.
+function sheetIdForRequest(req) {
+  if (isDemoRequest(req)) {
+    if (!process.env.DEMO_SHEET_ID) {
+      throw new Error("Demo mode is on, but DEMO_SHEET_ID is not set in .env.");
+    }
+    // Belt-and-suspenders: if DEMO_SHEET_ID was ever accidentally set to the
+    // same sheet as the real one, refuse rather than silently exposing real
+    // data to demo visitors.
+    if (process.env.DEMO_SHEET_ID === SHEET_CONFIG.sheetId) {
+      throw new Error("DEMO_SHEET_ID must not be the same as DEFAULT_SHEET_ID.");
+    }
+    return process.env.DEMO_SHEET_ID;
+  }
+  return SHEET_CONFIG.sheetId;
+}
+
 // Path to the service account key file used to authenticate with Google
 // (local dev only - see below).
 const KEY_FILE_PATH = path.join(__dirname, "..", "google-key.json");
@@ -182,9 +228,9 @@ const auth = new google.auth.GoogleAuth(googleAuthOptions);
 // Reads every row from the sheet, splitting the header row from the data
 // rows. We ask for a wide range (A1:Z) rather than a fixed number of columns,
 // so this keeps working even if columns are added or reordered later.
-async function loadSheetRows(sheets) {
+async function loadSheetRows(sheets, sheetId) {
   const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_CONFIG.sheetId,
+    spreadsheetId: sheetId,
     range: "A1:Z",
   });
 
@@ -227,11 +273,15 @@ function columnIndexToLetter(index) {
 // /api/leads: reads every row from the sheet and returns them as JSON.
 app.get("/api/leads", async (req, res) => {
   try {
+    // Demo-mode visitors read the seeded DEMO sheet here, never the real
+    // one - see sheetIdForRequest() above.
+    const sheetId = sheetIdForRequest(req);
+
     // Get an authenticated client, then create a Sheets API instance.
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const { headers, dataRows } = await loadSheetRows(sheets);
+    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
 
     // Look up each column's position by header name, using SHEET_CONFIG.
     const nameCol = getColumnIndex(headers, "name");
@@ -290,10 +340,11 @@ app.get("/api/leads", async (req, res) => {
 // Powers the compact "due for call-back" banner and its dedicated page.
 app.get("/api/leads/due", async (req, res) => {
   try {
+    const sheetId = sheetIdForRequest(req); // demo sheet in demo mode, real one otherwise
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const { headers, dataRows } = await loadSheetRows(sheets);
+    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
 
     const nameCol = getColumnIndex(headers, "name");
     const phoneCol = getColumnIndex(headers, "phone");
@@ -343,10 +394,11 @@ app.get("/api/leads/due", async (req, res) => {
 // means this endpoint never needs updating if a column is added later.
 app.get("/api/leads/:phone", async (req, res) => {
   try {
+    const sheetId = sheetIdForRequest(req); // demo sheet in demo mode, real one otherwise
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const lead = await findLeadRow(sheets, req.params.phone);
+    const lead = await findLeadRow(sheets, req.params.phone, sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -383,11 +435,18 @@ app.post("/api/leads/:phone/stage", async (req, res) => {
     return res.status(400).json({ error: "Request body must include a 'stage'." });
   }
 
+  // DEMO MODE: fake success, never write to any sheet. The frontend updates
+  // its own on-screen copy of the stage from this response either way, so
+  // the UI still reacts normally - it just doesn't persist anywhere.
+  if (isDemoRequest(req)) {
+    return res.json({ success: true });
+  }
+
   try {
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const lead = await findLeadRow(sheets, req.params.phone);
+    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -418,11 +477,16 @@ app.post("/api/leads/:phone/notes", async (req, res) => {
     return res.status(400).json({ error: "Request body must include 'notes'." });
   }
 
+  // DEMO MODE: fake success, never write to any sheet.
+  if (isDemoRequest(req)) {
+    return res.json({ success: true });
+  }
+
   try {
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const lead = await findLeadRow(sheets, req.params.phone);
+    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -455,11 +519,19 @@ app.post("/api/leads/:phone/callback", async (req, res) => {
     return res.status(400).json({ error: "Request body must include 'callBackOn' (use '' to clear it)." });
   }
 
+  // DEMO MODE: fake success, never write to any sheet. Still echoes back the
+  // formatted value (same formatting the real endpoint would store) so the
+  // panel can show it was "saved".
+  if (isDemoRequest(req)) {
+    const valueToStore = callBackOn ? new Date(callBackOn).toLocaleString() : "";
+    return res.json({ success: true, callBackOn: valueToStore });
+  }
+
   try {
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const lead = await findLeadRow(sheets, req.params.phone);
+    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
     }
@@ -494,6 +566,24 @@ app.post("/api/leads/:phone/callback", async (req, res) => {
 // send anything or touch the sheet - just returns the draft text for the
 // rep to review/edit in the panel before sending.
 app.post("/api/leads/:phone/draft-sms", async (req, res) => {
+  // DEMO MODE: return a canned draft instead of calling Gemini - skips the
+  // transcript check below entirely, since demo calls are simulated and
+  // never produce a real transcript to draft from.
+  if (isDemoRequest(req)) {
+    try {
+      const authClient = await auth.getClient();
+      const sheets = google.sheets({ version: "v4", auth: authClient });
+      const lead = await findLeadRow(sheets, req.params.phone, sheetIdForRequest(req));
+      const nameCol = lead ? getColumnIndex(lead.headers, "name") : -1;
+      const leadName = lead ? lead.row[nameCol] || "there" : "there";
+      return res.json({
+        draft: `Hi ${leadName}, great speaking with you today! I'll send over the details we discussed - let me know if any questions come up before then.`,
+      });
+    } catch (error) {
+      return res.json({ draft: "Hi, great speaking with you today! I'll send over the details we discussed - let me know if any questions come up." });
+    }
+  }
+
   const normalizedPhone = normalizePhoneNumber(req.params.phone);
   const transcriptLines = callTranscripts.get(normalizedPhone);
 
@@ -506,7 +596,7 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
   try {
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
-    const lead = await findLeadRow(sheets, req.params.phone);
+    const lead = await findLeadRow(sheets, req.params.phone, SHEET_CONFIG.sheetId);
 
     if (!lead) {
       return res.status(404).json({ error: "Lead not found." });
@@ -541,7 +631,7 @@ async function appendSmsLogToNotes(phone, message) {
   const authClient = await auth.getClient();
   const sheets = google.sheets({ version: "v4", auth: authClient });
 
-  const lead = await findLeadRow(sheets, phone);
+  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
   if (!lead) {
     console.error("No lead found in the sheet to log the sent SMS against, phone:", phone);
     return;
@@ -569,6 +659,11 @@ app.post("/api/leads/:phone/send-sms", async (req, res) => {
   const { message } = req.body;
   if (!message) {
     return res.status(400).json({ error: "Request body must include a 'message'." });
+  }
+
+  // DEMO MODE: fake success - never calls Twilio, never writes to any sheet.
+  if (isDemoRequest(req)) {
+    return res.json({ success: true });
   }
 
   try {
@@ -661,8 +756,8 @@ function normalizePhoneNumber(phone) {
 // incoming number, every row it compares against, and which one it picks
 // and why) so we can see exactly what's happening on a real call before
 // changing any matching logic.
-async function findLeadRow(sheets, phone) {
-  const { headers, dataRows } = await loadSheetRows(sheets);
+async function findLeadRow(sheets, phone, sheetId) {
+  const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
   const phoneCol = getColumnIndex(headers, "phone");
   const nameCol = getColumnIndex(headers, "name");
   const targetPhone = normalizePhoneNumber(phone);
@@ -722,7 +817,7 @@ async function updateLeadAfterCall(phone, outcome) {
   const authClient = await auth.getClient();
   const sheets = google.sheets({ version: "v4", auth: authClient });
 
-  const lead = await findLeadRow(sheets, phone);
+  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
   if (!lead) {
     console.error("No lead found in the sheet for phone:", phone);
     return null;
@@ -938,7 +1033,7 @@ async function writeAiCells(phone, temperatureValue, notesValue) {
   const authClient = await auth.getClient();
   const sheets = google.sheets({ version: "v4", auth: authClient });
 
-  const lead = await findLeadRow(sheets, phone);
+  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
   if (!lead) {
     console.error("No lead found in the sheet for AI insights, phone:", phone);
     return;
@@ -1068,7 +1163,7 @@ async function updateRelationshipHistory(phone, insights, transcriptText, callNu
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
 
-    const lead = await findLeadRow(sheets, phone);
+    const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
     if (!lead) {
       console.error("No lead found in the sheet for relationship summary, phone:", phone);
       return;
@@ -1124,6 +1219,13 @@ app.post("/api/call", async (req, res) => {
     return res.status(400).json({ error: "Request body must include a 'to' phone number." });
   }
 
+  // DEMO MODE: never place a real call. The frontend never calls this
+  // endpoint in demo mode anyway (see startDemoCall() in the frontend), but
+  // this refusal is a backend safety net in case it's ever hit directly.
+  if (isDemoRequest(req)) {
+    return res.status(403).json({ error: "Calling is disabled in demo mode." });
+  }
+
   try {
     const call = await placeCall(to);
     res.json({ success: true, callSid: call.sid });
@@ -1137,6 +1239,11 @@ app.post("/api/call", async (req, res) => {
 // GET /api/test-call: a shortcut that calls TEST_TO_NUMBER from .env automatically,
 // so you can trigger a test call to your own phone just by visiting this URL.
 app.get("/api/test-call", async (req, res) => {
+  // DEMO MODE: never place a real call.
+  if (isDemoRequest(req)) {
+    return res.status(403).json({ error: "Calling is disabled in demo mode." });
+  }
+
   const to = process.env.TEST_TO_NUMBER;
 
   if (!to) {
@@ -1154,7 +1261,21 @@ app.get("/api/test-call", async (req, res) => {
 
 // GET /api/token: creates a short-lived access token that lets the browser
 // itself make calls through Twilio, using the "Voice SDK" (WebRTC).
+//
+// THIS IS THE MAIN GATE THAT KEEPS DEMO MODE FROM EVER COSTING MONEY: the
+// frontend's demo-mode Call button (see startDemoCall() in index.html /
+// callbacks.html) never asks for a token in the first place, and refusing
+// to hand one out here means even a demo visitor poking at devtools can't
+// get the Twilio Voice SDK to place a real WebRTC call - without a valid
+// token, device.connect() has nothing to authenticate with, so it can never
+// reach Twilio's servers, which means /voice and /media-stream below (both
+// only ever called BY Twilio, for a call that was actually placed) are
+// never reachable in demo mode either.
 app.get("/api/token", (req, res) => {
+  if (isDemoRequest(req)) {
+    return res.status(403).json({ error: "Calling is disabled in demo mode." });
+  }
+
   try {
     const AccessToken = twilio.jwt.AccessToken;
     const VoiceGrant = AccessToken.VoiceGrant;
@@ -1240,11 +1361,24 @@ const callTranscripts = new Map();
 // Where the per-call log is persisted, so it survives a restart.
 const CALL_LOG_FILE_PATH = path.join(__dirname, "call-log.json");
 
-// Reads the whole call log. Returns [] if it doesn't exist yet (e.g. the
-// very first call ever) or can't be parsed for some reason.
-function loadCallLog() {
+// The seeded demo call log (see test-tools/seed-demo.js) - a separate file,
+// so demo mode's Analytics dashboard never reads your real call history.
+const DEMO_CALL_LOG_FILE_PATH = path.join(__dirname, "call-log.demo.json");
+
+// Picks which of the two files above a request's Analytics data should
+// come from - same idea as sheetIdForRequest() above.
+function callLogPathForRequest(req) {
+  return isDemoRequest(req) ? DEMO_CALL_LOG_FILE_PATH : CALL_LOG_FILE_PATH;
+}
+
+// Reads a whole call log file. Returns [] if it doesn't exist yet (e.g. the
+// very first call ever, or a demo log that hasn't been seeded) or can't be
+// parsed for some reason. Defaults to the real file, since the one caller
+// that doesn't pass a path explicitly (appendCallLogEntry below) only ever
+// runs for real calls.
+function loadCallLog(filePath = CALL_LOG_FILE_PATH) {
   try {
-    return JSON.parse(fs.readFileSync(CALL_LOG_FILE_PATH, "utf8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
     return [];
   }
@@ -1270,7 +1404,7 @@ async function getLeadNameAndTemperature(phone) {
   const authClient = await auth.getClient();
   const sheets = google.sheets({ version: "v4", auth: authClient });
 
-  const lead = await findLeadRow(sheets, phone);
+  const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
   if (!lead) return { name: "", temperatureValue: null };
 
   const nameCol = getColumnIndex(lead.headers, "name");
@@ -1381,7 +1515,8 @@ function computeAnalytics(calls) {
 //                                       together (e.g. 14-16 = 2pm-4pm)
 app.get("/api/analytics", async (req, res) => {
   try {
-    const log = loadCallLog();
+    const sheetId = sheetIdForRequest(req); // demo sheet in demo mode, real one otherwise
+    const log = loadCallLog(callLogPathForRequest(req));
 
     // A plain date-only string like "2026-07-10" parses as UTC midnight if
     // we hand it to `new Date()` as-is, but "...T00:00:00" (no "Z"/offset)
@@ -1403,7 +1538,7 @@ app.get("/api/analytics", async (req, res) => {
     // so the date/time filters above don't apply to them.
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
-    const { headers, dataRows } = await loadSheetRows(sheets);
+    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
 
     const nameCol = getColumnIndex(headers, "name");
     const phoneCol = getColumnIndex(headers, "phone");
@@ -1551,6 +1686,11 @@ app.post("/api/regenerate-insights", async (req, res) => {
     return res.status(400).json({ error: "Request body must include a 'phone' number." });
   }
 
+  // DEMO MODE: fake success - never calls Gemini, never writes to any sheet.
+  if (isDemoRequest(req)) {
+    return res.json({ success: true, message: "AI insights regenerated. (demo)" });
+  }
+
   const normalizedPhone = normalizePhoneNumber(phone);
   const transcriptLines = callTranscripts.get(normalizedPhone);
 
@@ -1563,7 +1703,7 @@ app.post("/api/regenerate-insights", async (req, res) => {
   try {
     const authClient = await auth.getClient();
     const sheets = google.sheets({ version: "v4", auth: authClient });
-    const lead = await findLeadRow(sheets, phone);
+    const lead = await findLeadRow(sheets, phone, SHEET_CONFIG.sheetId);
 
     if (!lead) {
       return res.status(404).json({ error: "No lead found in the sheet for this phone number." });
@@ -1589,6 +1729,12 @@ app.post("/api/regenerate-insights", async (req, res) => {
 // transcript (see last-transcript.json), if one exists yet. Lets the test
 // page load a real transcript with one click instead of copy/pasting it.
 app.get("/api/last-transcript", (req, res) => {
+  // DEMO MODE: refuse - this is a REAL past call's transcript (real lead
+  // conversation), so demo visitors must never be able to read it.
+  if (isDemoRequest(req)) {
+    return res.status(403).json({ error: "Not available in demo mode." });
+  }
+
   try {
     const contents = fs.readFileSync(LAST_TRANSCRIPT_FILE_PATH, "utf8");
     res.type("application/json").send(contents);
@@ -1606,6 +1752,12 @@ app.get("/api/last-transcript", (req, res) => {
 //   "callNumber": <optional, defaults to 1>
 // }
 app.post("/api/test-insights", async (req, res) => {
+  // DEMO MODE: refuse - this calls Gemini for real (it's a prompt-testing
+  // tool, not something a demo visitor should be able to trigger).
+  if (isDemoRequest(req)) {
+    return res.status(403).json({ error: "Not available in demo mode." });
+  }
+
   const { transcript, callNumber } = req.body;
 
   if (!transcript) {

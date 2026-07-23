@@ -136,6 +136,31 @@
       background: #1739a8;
     }
 
+    /* Secondary option on the sign-in card - links straight to GET /demo. */
+    .view-demo-button {
+      display: inline-block;
+      margin-top: 0.75rem;
+      color: #1d4ed8;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .view-demo-button:hover {
+      text-decoration: underline;
+    }
+
+    /* Always-visible strip while in DEMO MODE - see checkSignedIn(). */
+    .demo-banner {
+      display: none; /* JS switches this to "block" only in demo mode */
+      background: #fef3c7;
+      color: #92400e;
+      text-align: center;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.4rem;
+    }
+
     .card {
       background: #ffffff;
       border-radius: 10px;
@@ -247,8 +272,13 @@
       <h1>Rhythm</h1>
       <p>Sign in with your Google account to manage your leads.</p>
       <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
+      <br />
+      <a href="/demo" class="view-demo-button">View Demo (no sign-in needed)</a>
     </div>
   </div>
+
+  <!-- Always-visible while in demo mode - see checkSignedIn(). -->
+  <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
   <!-- Same top bar on every page. This page marks "Analytics" as active. -->
   <div class="top-bar">
@@ -356,20 +386,33 @@
     const signInOverlay = document.getElementById("signInOverlay");
     const userBarName = document.getElementById("userBarName");
     const signOutButton = document.getElementById("signOutButton");
+    const demoBanner = document.getElementById("demoBanner");
+    let demoMode = false;
 
     async function checkSignedIn() {
       try {
         const response = await fetch("/api/me");
         const data = await response.json();
 
-        if (!data.user) {
-          signInOverlay.style.display = "flex";
-          return false;
+        demoMode = !!data.demo;
+        demoBanner.style.display = demoMode ? "block" : "none";
+
+        if (data.user) {
+          signInOverlay.style.display = "none";
+          userBarName.textContent = data.user.name || data.user.email;
+          signOutButton.textContent = "Sign out";
+          return true;
         }
 
-        signInOverlay.style.display = "none";
-        userBarName.textContent = data.user.name || data.user.email;
-        return true;
+        if (demoMode) {
+          signInOverlay.style.display = "none";
+          userBarName.textContent = "Demo visitor";
+          signOutButton.textContent = "Exit demo";
+          return true;
+        }
+
+        signInOverlay.style.display = "flex";
+        return false;
       } catch (error) {
         signInOverlay.style.display = "flex";
         return false;
@@ -377,7 +420,7 @@
     }
 
     signOutButton.addEventListener("click", async () => {
-      await fetch("/auth/logout", { method: "POST" });
+      await fetch(demoMode ? "/demo/exit" : "/auth/logout", { method: "POST" });
       location.reload();
     });
 
