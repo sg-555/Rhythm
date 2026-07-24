@@ -519,6 +519,64 @@
       box-shadow: var(--shadow-card);
     }
 
+    /* ── "My sheets" (profile panel) - see index.html's copy of this for
+       the full explanation. */
+    .sheets-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      margin-bottom: var(--sp-3);
+    }
+
+    .sheet-row {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-2);
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-3);
+    }
+
+    .sheet-row.active {
+      border-color: var(--accent);
+    }
+
+    .sheet-row-name {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-weight: 600;
+      font-size: var(--text-body);
+    }
+
+    .sheet-active-badge {
+      font-size: var(--text-micro);
+      font-weight: 600;
+      color: var(--accent-ink);
+      background: var(--accent-bg);
+      border-radius: var(--radius-sm);
+      padding: 2px var(--sp-2);
+    }
+
+    .sheet-row-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+    }
+
+    .sheet-row-link {
+      font-size: var(--text-meta);
+      font-weight: 600;
+      color: var(--interactive);
+      text-decoration: none;
+    }
+
+    .sheet-row-link:hover {
+      text-decoration: underline;
+    }
+
     .profile-stats-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1590,7 +1648,157 @@
       return `${Math.round(fraction * 100)}%`;
     }
 
-    function renderProfilePanel(profile) {
+    // Reloads the whole page after switching/creating a sheet - see
+    // index.html's copy of this for the full explanation.
+    function reloadForSheetChange() {
+      location.reload();
+    }
+
+    // isInCall exists here too (this page also has calling, via
+    // shared-lead-panel.js) - see index.html's copy of this for why the
+    // typeof check matters.
+    function aCallIsInProgress() {
+      return typeof isInCall !== "undefined" && isInCall;
+    }
+
+    // Builds the "My sheets" section - see index.html's copy of this for
+    // the full explanation.
+    function renderSheetsSection(sheets, activeSheetId) {
+      const container = document.createElement("div");
+
+      const list = document.createElement("div");
+      list.className = "sheets-list";
+
+      const status = document.createElement("span");
+      status.className = "call-status";
+
+      sheets.forEach((sheet) => {
+        const isActive = sheet.sheetId === activeSheetId;
+
+        const row = document.createElement("div");
+        row.className = "sheet-row" + (isActive ? " active" : "");
+
+        const nameLine = document.createElement("div");
+        nameLine.className = "sheet-row-name";
+
+        const nameText = document.createElement("span");
+        nameText.textContent = sheet.name;
+        nameLine.appendChild(nameText);
+
+        if (isActive) {
+          const badge = document.createElement("span");
+          badge.className = "sheet-active-badge";
+          badge.textContent = "Active";
+          nameLine.appendChild(badge);
+        }
+
+        row.appendChild(nameLine);
+
+        const actions = document.createElement("div");
+        actions.className = "sheet-row-actions";
+
+        const openLink = document.createElement("a");
+        openLink.href = sheetUrlFor(sheet.sheetId);
+        openLink.target = "_blank";
+        openLink.rel = "noopener";
+        openLink.className = "sheet-row-link";
+        openLink.textContent = "Open in Google Sheets";
+        actions.appendChild(openLink);
+
+        const renameButton = document.createElement("button");
+        renameButton.type = "button";
+        renameButton.className = "btn-secondary";
+        renameButton.textContent = "Rename";
+        renameButton.addEventListener("click", async () => {
+          const newName = prompt("Rename this sheet (just within Rhythm - it won't rename the Google file itself):", sheet.name);
+          if (newName === null) return;
+
+          const trimmed = newName.trim();
+          if (!trimmed || trimmed === sheet.name) return;
+
+          status.textContent = "Renaming...";
+          try {
+            const response = await fetch(`/api/sheets/${encodeURIComponent(sheet.sheetId)}/rename`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: trimmed }),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not rename sheet.");
+            sheet.name = trimmed;
+            nameText.textContent = trimmed;
+            status.textContent = "Renamed.";
+          } catch (error) {
+            status.textContent = "Error: " + error.message;
+          }
+        });
+        actions.appendChild(renameButton);
+
+        if (!isActive) {
+          const switchButton = document.createElement("button");
+          switchButton.type = "button";
+          switchButton.className = "btn-secondary";
+          switchButton.textContent = "Switch to this sheet";
+          switchButton.addEventListener("click", async () => {
+            if (aCallIsInProgress()) {
+              status.textContent = "Finish your current call before switching sheets.";
+              return;
+            }
+
+            switchButton.disabled = true;
+            switchButton.textContent = "Switching...";
+            status.textContent = "";
+            try {
+              const response = await fetch(`/api/sheets/${encodeURIComponent(sheet.sheetId)}/activate`, { method: "POST" });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.error || "Could not switch sheets.");
+              reloadForSheetChange();
+            } catch (error) {
+              switchButton.disabled = false;
+              switchButton.textContent = "Switch to this sheet";
+              status.textContent = "Error: " + error.message;
+            }
+          });
+          actions.appendChild(switchButton);
+        }
+
+        row.appendChild(actions);
+        list.appendChild(row);
+      });
+
+      container.appendChild(list);
+
+      const createButton = document.createElement("button");
+      createButton.type = "button";
+      createButton.className = "btn-secondary";
+      createButton.textContent = "Create a new sheet";
+      createButton.addEventListener("click", async () => {
+        if (aCallIsInProgress()) {
+          status.textContent = "Finish your current call before creating a new sheet.";
+          return;
+        }
+
+        createButton.disabled = true;
+        createButton.textContent = "Creating...";
+        status.textContent = "";
+        try {
+          const response = await fetch("/api/sheets", { method: "POST" });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Could not create a new sheet.");
+          reloadForSheetChange();
+        } catch (error) {
+          createButton.disabled = false;
+          createButton.textContent = "Create a new sheet";
+          status.textContent = "Error: " + error.message;
+        }
+      });
+      container.appendChild(createButton);
+      container.appendChild(status);
+
+      return container;
+    }
+
+    function renderProfilePanel(profile, sheets) {
       profilePanelContent.innerHTML = "";
 
       const header = document.createElement("div");
@@ -1683,6 +1891,11 @@
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
+      // "My sheets" - see index.html's copy of this for the full explanation.
+      if (!demoMode && sheets && sheets.length > 0) {
+        profilePanelContent.appendChild(makeSection("My sheets", renderSheetsSection(sheets, profile.sheetId)));
+      }
+
       const statsGrid = document.createElement("div");
       statsGrid.className = "profile-stats-grid";
 
@@ -1766,7 +1979,21 @@
         const response = await fetch("/api/profile");
         const profile = await response.json();
         if (!response.ok) throw new Error(profile.error || "Could not load profile.");
-        renderProfilePanel(profile);
+
+        // Demo mode has no real per-user sheets to manage - see
+        // index.html's copy of this for the full explanation.
+        let sheets = [];
+        if (!demoMode) {
+          try {
+            const sheetsResponse = await fetch("/api/sheets");
+            const sheetsData = await sheetsResponse.json();
+            if (sheetsResponse.ok) sheets = sheetsData.sheets;
+          } catch (error) {
+            // Non-critical - see index.html's copy of this for why.
+          }
+        }
+
+        renderProfilePanel(profile, sheets);
       } catch (error) {
         profilePanelContent.textContent = "Couldn't load profile: " + error.message;
       }

@@ -14,6 +14,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { google } = require("googleapis");
+const db = require("./db");
 
 // ── Google OAuth2 client ─────────────────────────────────────────────────
 // This is what talks to Google to build the sign-in URL and exchange the
@@ -70,12 +71,26 @@ async function exchangeCodeForUser(code) {
   return { tokens, profile };
 }
 
-// ── User storage (a simple JSON file, keyed by email) ────────────────────
+// ── User storage ─────────────────────────────────────────────────────────
+// Dual-mode: a real Postgres database (db.isDatabaseMode - see db.js) when
+// DATABASE_URL is set, or a local users.json file otherwise. This matters
+// because Render's filesystem is EPHEMERAL - it's wiped on every restart,
+// so a deployed instance storing sheetId/tokens/theme in a plain file would
+// quietly lose them every time the instance sleeps or redeploys. The
+// database survives that; the JSON file is only for running locally
+// without needing Postgres installed.
+//
+// Every function below has the SAME signature and return shape regardless
+// of which mode is active - callers in server.js never need to know or
+// care which one they're talking to. All of them are now async (even the
+// JSON-file path), since a real database call always is - this keeps the
+// two modes interchangeable instead of one being sync and one async.
 const USERS_FILE_PATH = path.join(__dirname, "users.json");
 
-// Reads every stored user. Returns {} if the file doesn't exist yet (e.g.
-// nobody has ever signed in) or can't be parsed for some reason.
-function loadUsers() {
+// Reads every stored user from the JSON file. Returns {} if it doesn't
+// exist yet (e.g. nobody has ever signed in) or can't be parsed for some
+// reason. Only ever used in JSON-file mode.
+function loadUsersFile() {
   try {
     return JSON.parse(fs.readFileSync(USERS_FILE_PATH, "utf8"));
   } catch (error) {
@@ -83,9 +98,64 @@ function loadUsers() {
   }
 }
 
+function saveUsersFile(users) {
+  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+}
+
+// Turns one database row (snake_case columns) into the same camelCase
+// shape the JSON-file path already returns, so the rest of the app never
+// has to know which mode produced a given user object.
+function rowToUser(row) {
+  if (!row) return null;
+  return {
+    email: row.email,
+    name: row.name || "",
+    picture: row.picture || null,
+    company: row.company || "",
+    sheetId: row.sheet_id || null,
+    phoneColumnFormatted: row.phone_column_formatted || false,
+    theme: row.theme || null,
+    accessToken: row.access_token,
+    refreshToken: row.refresh_token,
+    // Postgres returns BIGINT columns as strings (so huge values never
+    // silently lose precision in JS) - this one's a millisecond timestamp,
+    // safely within a normal JS number, so converting back is fine.
+    tokenExpiryDate: row.token_expiry === null || row.token_expiry === undefined ? null : Number(row.token_expiry),
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
 // Saves (or updates) one user's record from a fresh sign-in, and returns it.
-function saveUser(email, tokens, profile) {
-  const users = loadUsers();
+async function saveUser(email, tokens, profile) {
+  if (db.isDatabaseMode) {
+    try {
+      // A single INSERT ... ON CONFLICT is atomic - no separate "read the
+      // existing row first" step needed (unlike the JSON path below), and
+      // no race window where a concurrent write could clobber another
+      // field. Columns NOT listed in DO UPDATE SET (company, sheet_id,
+      // theme, phone_column_formatted) are simply left alone on conflict -
+      // that's what "never touched here, so re-signing in never loses it"
+      // means for each of those fields.
+      const result = await db.query(
+        `INSERT INTO users (email, name, picture, company, sheet_id, theme, phone_column_formatted, access_token, refresh_token, token_expiry)
+         VALUES ($1, $2, $3, '', NULL, NULL, FALSE, $4, $5, $6)
+         ON CONFLICT (email) DO UPDATE SET
+           name = EXCLUDED.name,
+           picture = COALESCE(EXCLUDED.picture, users.picture),
+           access_token = EXCLUDED.access_token,
+           refresh_token = COALESCE(EXCLUDED.refresh_token, users.refresh_token),
+           token_expiry = EXCLUDED.token_expiry
+         RETURNING *`,
+        [email, profile.name || "", profile.picture || null, tokens.access_token, tokens.refresh_token || null, tokens.expiry_date || null]
+      );
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to save user to database:", error.message);
+      throw error; // the OAuth callback needs to know sign-in didn't actually persist
+    }
+  }
+
+  const users = loadUsersFile();
   const existing = users[email] || {};
 
   users[email] = {
@@ -120,24 +190,44 @@ function saveUser(email, tokens, profile) {
     createdAt: existing.createdAt || new Date().toISOString(),
   };
 
-  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  saveUsersFile(users);
   return users[email];
 }
 
 // Looks up one user by email. Returns null if we've never seen them.
-function getUser(email) {
-  return loadUsers()[email] || null;
+async function getUser(email) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to read user from database:", error.message);
+      return null;
+    }
+  }
+
+  return loadUsersFile()[email] || null;
 }
 
 // Updates just the company/organisation field for one user (the profile
 // menu's editable field). Returns the updated user, or null if we've never
 // seen this email before.
-function updateUserCompany(email, company) {
-  const users = loadUsers();
+async function updateUserCompany(email, company) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query("UPDATE users SET company = $1 WHERE email = $2 RETURNING *", [company, email]);
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to update company in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
   if (!users[email]) return null;
 
   users[email].company = company;
-  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  saveUsersFile(users);
   return users[email];
 }
 
@@ -145,36 +235,69 @@ function updateUserCompany(email, company) {
 // either by creating a brand-new sheet or connecting an existing one (see
 // the /api/onboarding/* routes in server.js). Returns the updated user, or
 // null if we've never seen this email before.
-function updateUserSheetId(email, sheetId) {
-  const users = loadUsers();
+async function updateUserSheetId(email, sheetId) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query("UPDATE users SET sheet_id = $1 WHERE email = $2 RETURNING *", [sheetId, email]);
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to update sheetId in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
   if (!users[email]) return null;
 
   users[email].sheetId = sheetId;
-  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  saveUsersFile(users);
   return users[email];
 }
 
 // Updates just the theme preference for one user (the profile panel's
 // toggle). Pass null to go back to "follow system preference". Returns the
 // updated user, or null if we've never seen this email before.
-function updateUserTheme(email, theme) {
-  const users = loadUsers();
+async function updateUserTheme(email, theme) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query("UPDATE users SET theme = $1 WHERE email = $2 RETURNING *", [theme || null, email]);
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to update theme in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
   if (!users[email]) return null;
 
   users[email].theme = theme || null;
-  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  saveUsersFile(users);
   return users[email];
 }
 
 // Marks the Phone-column plain-text fix-up as done for one user, so it
 // never runs again for them - see applyPhoneColumnPlainTextFormat() and
 // getSheetsContextForUser() in server.js.
-function updateUserPhoneColumnFormatted(email) {
-  const users = loadUsers();
+async function updateUserPhoneColumnFormatted(email) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query(
+        "UPDATE users SET phone_column_formatted = TRUE WHERE email = $1 RETURNING *",
+        [email]
+      );
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to update phoneColumnFormatted in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
   if (!users[email]) return null;
 
   users[email].phoneColumnFormatted = true;
-  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  saveUsersFile(users);
   return users[email];
 }
 
@@ -182,15 +305,159 @@ function updateUserPhoneColumnFormatted(email) {
 // user. Called automatically whenever getUserOAuthClient()'s client
 // refreshes itself behind the scenes - see below - so the NEXT request
 // doesn't have to refresh again right away. Silently does nothing if the
-// user has since been removed (e.g. users.json was hand-edited) - losing
-// one refreshed token is harmless, since the next request just refreshes again.
-function updateUserTokens(email, accessToken, expiryDate) {
-  const users = loadUsers();
+// user has since been removed (e.g. hand-edited data) - losing one
+// refreshed token is harmless, since the next request just refreshes again.
+async function updateUserTokens(email, accessToken, expiryDate) {
+  if (db.isDatabaseMode) {
+    try {
+      await db.query("UPDATE users SET access_token = $1, token_expiry = $2 WHERE email = $3", [
+        accessToken,
+        expiryDate || null,
+        email,
+      ]);
+    } catch (error) {
+      console.error("Failed to update tokens in database:", error.message);
+    }
+    return;
+  }
+
+  const users = loadUsersFile();
   if (!users[email]) return;
 
   users[email].accessToken = accessToken;
   users[email].tokenExpiryDate = expiryDate || null;
-  fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2));
+  saveUsersFile(users);
+}
+
+// ── Multiple sheets per user ─────────────────────────────────────────────
+// A user can now have MORE than one Rhythm sheet (e.g. one per quarter's
+// lead list) and switch between them. WHICH one is active is still just
+// users.sheetId, completely unchanged - every existing sheet-reading code
+// path in server.js keeps working exactly as before, since it only ever
+// reads user.sheetId. This section is only the LIST to switch between, and
+// the handful of operations on it (add one, rename one).
+
+function rowToSheet(row) {
+  if (!row) return null;
+  return {
+    sheetId: row.sheet_id,
+    name: row.name,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+  };
+}
+
+// Returns every sheet this user has, oldest first. MIGRATION: anyone who
+// connected their (single) sheet before this feature existed has a
+// sheetId on their user record but no rows here yet - the first time this
+// is called for them, it backfills ONE entry from that existing sheetId,
+// named "Rhythm Leads" (the name every sheet gets at creation anyway), so
+// their existing sheet becomes their first, active sheet in the new list -
+// exactly what "migrate existing users" means here. After that first
+// backfill, this table is the real source of truth.
+async function getSheetsForUser(email) {
+  if (db.isDatabaseMode) {
+    try {
+      let result = await db.query(
+        "SELECT sheet_id, name, created_at FROM sheets WHERE user_email = $1 ORDER BY created_at",
+        [email]
+      );
+
+      if (result.rows.length === 0) {
+        const user = await getUser(email);
+        if (user && user.sheetId) {
+          // "WHERE NOT EXISTS" makes this insert safe to run more than once
+          // (e.g. two requests racing to backfill at the same moment) -
+          // whichever runs second just does nothing instead of creating a
+          // duplicate row for the same sheet.
+          await db.query(
+            `INSERT INTO sheets (user_email, sheet_id, name, created_at)
+             SELECT $1, $2, $3, $4::timestamptz
+             WHERE NOT EXISTS (SELECT 1 FROM sheets WHERE user_email = $1 AND sheet_id = $2)`,
+            [email, user.sheetId, "Rhythm Leads", user.createdAt || new Date().toISOString()]
+          );
+          result = await db.query(
+            "SELECT sheet_id, name, created_at FROM sheets WHERE user_email = $1 ORDER BY created_at",
+            [email]
+          );
+        }
+      }
+
+      return result.rows.map(rowToSheet);
+    } catch (error) {
+      console.error("Failed to load sheets list from database:", error.message);
+      return [];
+    }
+  }
+
+  const users = loadUsersFile();
+  const user = users[email];
+  if (!user) return [];
+
+  if (!user.sheets) user.sheets = [];
+
+  if (user.sheets.length === 0 && user.sheetId) {
+    user.sheets.push({ sheetId: user.sheetId, name: "Rhythm Leads", createdAt: user.createdAt || new Date().toISOString() });
+    saveUsersFile(users);
+  }
+
+  return user.sheets;
+}
+
+// Adds a newly-created sheet to a user's list (does NOT make it active -
+// call updateUserSheetId() separately for that, same as onboarding does).
+// Returns the new entry, or null if we've never seen this email before.
+async function addSheetForUser(email, sheetId, name) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query(
+        "INSERT INTO sheets (user_email, sheet_id, name) VALUES ($1, $2, $3) RETURNING sheet_id, name, created_at",
+        [email, sheetId, name]
+      );
+      return rowToSheet(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to add sheet to database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
+  if (!users[email]) return null;
+
+  if (!users[email].sheets) users[email].sheets = [];
+  const entry = { sheetId, name, createdAt: new Date().toISOString() };
+  users[email].sheets.push(entry);
+  saveUsersFile(users);
+  return entry;
+}
+
+// Renames one of a user's sheets WITHIN RHYTHM ONLY - this is just the
+// display name shown in "My sheets", never the underlying Google file's own
+// title. Returns the updated entry, or null if that sheetId isn't actually
+// one of this user's sheets.
+async function renameSheetForUser(email, sheetId, newName) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query(
+        "UPDATE sheets SET name = $1 WHERE user_email = $2 AND sheet_id = $3 RETURNING sheet_id, name, created_at",
+        [newName, email, sheetId]
+      );
+      return rowToSheet(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to rename sheet in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
+  const user = users[email];
+  if (!user || !user.sheets) return null;
+
+  const entry = user.sheets.find((sheet) => sheet.sheetId === sheetId);
+  if (!entry) return null;
+
+  entry.name = newName;
+  saveUsersFile(users);
+  return entry;
 }
 
 // Builds a Google API client authenticated as ONE specific user, using
@@ -223,7 +490,13 @@ function getUserOAuthClient(user) {
 
   client.on("tokens", (tokens) => {
     if (tokens.access_token) {
-      updateUserTokens(user.email, tokens.access_token, tokens.expiry_date);
+      // Fire-and-forget: this listener isn't async, and nothing needs to
+      // wait for the persisted copy before continuing to use the client -
+      // updateUserTokens() already catches its own errors internally, this
+      // is just a safety net for anything unexpected slipping through.
+      updateUserTokens(user.email, tokens.access_token, tokens.expiry_date).catch((error) => {
+        console.error("Failed to persist a refreshed token:", error.message);
+      });
     }
   });
 
@@ -266,7 +539,7 @@ function readSessionIdFromRequest(req) {
 }
 
 // Looks up the currently signed-in user (or null) from a request's cookie.
-function getCurrentUser(req) {
+async function getCurrentUser(req) {
   const sessionId = readSessionIdFromRequest(req);
   if (!sessionId) return null;
 
@@ -308,6 +581,9 @@ module.exports = {
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
   updateUserTokens,
+  getSheetsForUser,
+  addSheetForUser,
+  renameSheetForUser,
   getUserOAuthClient,
   createSession,
   destroySession,

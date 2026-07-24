@@ -485,6 +485,17 @@ function updateWorkspaceLayout() {
       const callStatus = document.createElement("span");
       callStatus.className = "call-status";
 
+      // Closes THIS panel the instant its own Call button is pressed -
+      // registered separately from (and before) attachCallHandlers below,
+      // so it fires unconditionally on click itself, not only once a call
+      // actually goes through. attachCallHandlers's own click handler has
+      // early-return guards before its call to closeLeadPanel() (e.g. "the
+      // Twilio device isn't ready yet") that could otherwise skip closing
+      // the panel even though the rep clearly meant to start a call from
+      // inside it. Safe to call twice - closeLeadPanel() just removes a CSS
+      // class either way.
+      callButton.addEventListener("click", () => closeLeadPanel());
+
       // Reuses the exact same calling logic as the leads table (see above).
       attachCallHandlers(lead.phone, callButton, hangupButton, callStatus);
 

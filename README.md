@@ -69,9 +69,12 @@ GEMINI_API_KEY=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+DATABASE_URL=
 ```
 
 You'll also need a Google service account key saved as `google-key.json` in the project root - this is only used to serve Demo Mode's seeded sheet, not any real user's data.
+
+`DATABASE_URL` is **optional locally** - if it's unset, the app falls back to storing users/call history in local JSON files (`users.json`, `call-log.json`, `call-history.json`), which is fine for running on your own machine. In deployment (e.g. Render), set `DATABASE_URL` to a real Postgres instance - Render's disk is wiped on every restart, so without a database, sheetId/tokens/theme/call history would silently disappear each time the instance sleeps or redeploys. The server logs which mode it's using at startup either way. Demo Mode never uses either one - its seeded data always comes from `call-log.demo.json`, committed to the repo.
 
 Then run the server:
 

@@ -43,6 +43,9 @@ const {
   updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
+  getSheetsForUser,
+  addSheetForUser,
+  renameSheetForUser,
   getUserOAuthClient,
   createSession,
   destroySession,
@@ -51,6 +54,7 @@ const {
   clearSessionCookie,
 } = require("./auth");
 const { isDemoRequest, setDemoCookie, clearDemoCookie } = require("./demo");
+const db = require("./db");
 
 const app = express();
 const PORT = 3000;
@@ -101,7 +105,7 @@ app.get("/auth/google/callback", async (req, res) => {
 
   try {
     const { tokens, profile } = await exchangeCodeForUser(code);
-    saveUser(profile.email, tokens, profile);
+    await saveUser(profile.email, tokens, profile);
 
     const sessionId = createSession(profile.email);
     setSessionCookie(res, sessionId);
@@ -117,8 +121,8 @@ app.get("/auth/google/callback", async (req, res) => {
 // GET /api/me: tells the frontend who (if anyone) is currently signed in,
 // and whether this browser is in DEMO MODE instead. Never sends tokens to
 // the browser - just what the UI needs to show.
-app.get("/api/me", (req, res) => {
-  const user = getCurrentUser(req);
+app.get("/api/me", async (req, res) => {
+  const user = await getCurrentUser(req);
   res.json({
     // hasSheet tells the frontend whether to show the leads table or the
     // onboarding screen (see checkSignedIn() in each page) - true only once
@@ -195,7 +199,7 @@ const DEMO_PROFILE_PERSONA = {
 app.get("/api/profile", async (req, res) => {
   if (isDemoRequest(req)) {
     try {
-      const analytics = computeAnalytics(loadCallLog(DEMO_CALL_LOG_FILE_PATH));
+      const analytics = computeAnalytics(loadDemoCallLog());
 
       let dealsClosed = 0;
       try {
@@ -226,14 +230,17 @@ app.get("/api/profile", async (req, res) => {
     }
   }
 
-  const user = getCurrentUser(req);
+  const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
 
   try {
     // computeAnalytics() with no date/time filter = the whole call history.
-    const analytics = computeAnalytics(loadCallLog());
+    // Scoped to THIS user (see loadCallLog()) - previously this read the
+    // single shared call-log.json unscoped, so every rep's stats were
+    // mixed together; now each user only ever sees their own calls.
+    const analytics = computeAnalytics(await loadCallLog(user.email));
 
     // "Deals closed" needs this user's own sheet - but name/email/photo/
     // company are still meaningful even before they've onboarded, so a
@@ -274,8 +281,8 @@ app.get("/api/profile", async (req, res) => {
 // POST /api/profile: updates the signed-in user's company/organisation
 // and/or theme preference - the editable fields in the profile panel.
 // Expects { "company": "..." } and/or { "theme": "light"|"dark"|null }.
-app.post("/api/profile", (req, res) => {
-  const user = getCurrentUser(req);
+app.post("/api/profile", async (req, res) => {
+  const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
@@ -285,8 +292,8 @@ app.post("/api/profile", (req, res) => {
     return res.status(400).json({ error: "Request body must include 'company' or 'theme'." });
   }
 
-  if (company !== undefined) updateUserCompany(user.email, company);
-  if (theme !== undefined) updateUserTheme(user.email, theme);
+  if (company !== undefined) await updateUserCompany(user.email, company);
+  if (theme !== undefined) await updateUserTheme(user.email, theme);
 
   res.json({ success: true, company, theme });
 });
@@ -379,7 +386,7 @@ async function getSheetsContextForUser(user) {
   if (!user.phoneColumnFormatted) {
     try {
       await applyPhoneColumnPlainTextFormat(sheets, user.sheetId);
-      updateUserPhoneColumnFormatted(user.email);
+      await updateUserPhoneColumnFormatted(user.email);
       user.phoneColumnFormatted = true; // keep this in-memory copy in sync too
     } catch (error) {
       console.error("Could not apply plain-text Phone format for", user.email, "-", error.message);
@@ -401,7 +408,7 @@ async function getSheetsContextForRequest(req) {
     return { sheets: google.sheets({ version: "v4", auth: authClient }), sheetId: process.env.DEMO_SHEET_ID };
   }
 
-  const user = getCurrentUser(req);
+  const user = await getCurrentUser(req);
   if (!user) {
     throw taggedError("Not signed in.", "REAUTH_REQUIRED");
   }
@@ -413,7 +420,7 @@ async function getSheetsContextForRequest(req) {
 // server with no browser session/cookie at all. See the /voice and
 // /call-status handlers below for how the email gets there.
 async function getSheetsContextForEmail(email) {
-  const user = getUser(email);
+  const user = await getUser(email);
   if (!user) {
     throw taggedError(`No stored account for ${email}.`, "REAUTH_REQUIRED");
   }
@@ -569,7 +576,7 @@ async function createRhythmSheetForUser(user) {
 // Google Picker integration, neither of which is built yet. See the
 // onboarding screen's "coming soon" note.
 app.post("/api/onboarding/create-sheet", async (req, res) => {
-  const user = getCurrentUser(req);
+  const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in.", reauthRequired: true });
   }
@@ -585,15 +592,103 @@ app.post("/api/onboarding/create-sheet", async (req, res) => {
 
   try {
     const sheetId = await createRhythmSheetForUser(user);
-    updateUserSheetId(user.email, sheetId);
+    await updateUserSheetId(user.email, sheetId);
     // createRhythmSheetForUser() already applied the plain-text Phone
     // format as part of creation - mark it done so getSheetsContextForUser()
     // doesn't redundantly re-apply it on this user's next request.
-    updateUserPhoneColumnFormatted(user.email);
+    await updateUserPhoneColumnFormatted(user.email);
+    // Also add it to the "My sheets" list (see /api/sheets below) - this is
+    // this user's FIRST sheet, so the list starts with just this one entry.
+    await addSheetForUser(user.email, sheetId, "Rhythm Leads");
     res.json({ success: true, sheetId });
   } catch (error) {
     handleSheetsError(res, error);
   }
+});
+
+// ── Multiple sheets ("My sheets" in the profile panel) ───────────────────
+// A user can have more than one Rhythm sheet and switch which one the WHOLE
+// app works off - see auth.js's getSheetsForUser()/addSheetForUser()/
+// renameSheetForUser() for how the list itself is stored. The ACTIVE sheet
+// is still just user.sheetId, so nothing outside these four routes needs
+// to change - every existing /api/leads, /api/analytics, etc. route keeps
+// reading user.sheetId exactly as before, it just may now point at a
+// different sheet than it used to.
+
+// GET /api/sheets: this user's full list, plus which one is active.
+app.get("/api/sheets", async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  const sheets = await getSheetsForUser(user.email);
+  res.json({ sheets, activeSheetId: user.sheetId || null });
+});
+
+// POST /api/sheets: creates a genuinely NEW sheet (unlike onboarding's
+// create-sheet, this is NOT idempotent - it's "I'm done with my current
+// leads, give me a fresh sheet" - see the profile panel's "Create a new
+// sheet" button), adds it to the list, and makes it the active one.
+app.post("/api/sheets", async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  try {
+    const sheetId = await createRhythmSheetForUser(user);
+    await addSheetForUser(user.email, sheetId, "Rhythm Leads");
+    await updateUserSheetId(user.email, sheetId);
+    res.json({ success: true, sheetId });
+  } catch (error) {
+    handleSheetsError(res, error);
+  }
+});
+
+// POST /api/sheets/:sheetId/activate: switches which sheet is active -
+// the frontend does a full page reload right after this succeeds, so
+// nothing from the previous sheet (leads, filters, pagination) lingers on
+// screen. Always checks the sheetId is actually one of THIS user's own
+// sheets first - never blindly trust an id from the URL.
+app.post("/api/sheets/:sheetId/activate", async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  const { sheetId } = req.params;
+  const sheets = await getSheetsForUser(user.email);
+  const owned = sheets.some((sheet) => sheet.sheetId === sheetId);
+  if (!owned) {
+    return res.status(404).json({ error: "That sheet isn't in your list." });
+  }
+
+  await updateUserSheetId(user.email, sheetId);
+  res.json({ success: true, sheetId });
+});
+
+// POST /api/sheets/:sheetId/rename: changes a sheet's DISPLAY NAME within
+// Rhythm only - never touches the underlying Google file's own title.
+// Expects a JSON body like: { "name": "Q2 leads" }
+app.post("/api/sheets/:sheetId/rename", async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  const { sheetId } = req.params;
+  const name = (req.body.name || "").trim();
+  if (!name) {
+    return res.status(400).json({ error: "Request body must include a non-empty 'name'." });
+  }
+
+  const updated = await renameSheetForUser(user.email, sheetId, name);
+  if (!updated) {
+    return res.status(404).json({ error: "That sheet isn't in your list." });
+  }
+
+  res.json({ success: true, sheet: updated });
 });
 
 // /api/leads: reads every row from the sheet and returns them as JSON.
@@ -1453,24 +1548,40 @@ async function generateAndSaveInsights(sheets, sheetId, phone, transcriptText, c
 // 2. The "Previous Calls" sheet column, an evolving PROSE narrative across
 //    every call (separate from "AI Notes", which always stays latest-call-only).
 
-// Where the per-lead call history is persisted, so it survives a restart.
+// Where the per-lead call history is persisted in JSON-file mode (local dev
+// without DATABASE_URL - see db.js). In database mode this file is never
+// touched; rows go in the call_history table instead, scoped by user_email.
 const CALL_HISTORY_FILE_PATH = path.join(__dirname, "call-history.json");
 
-// Reads the whole history file. Returns {} if it doesn't exist yet (e.g.
-// the very first call ever) or can't be parsed for some reason.
-function loadCallHistory() {
-  try {
-    return JSON.parse(fs.readFileSync(CALL_HISTORY_FILE_PATH, "utf8"));
-  } catch (error) {
-    return {};
-  }
-}
-
-// Adds one compact entry to a lead's history (keyed by normalized phone)
-// and saves the whole file straight back to disk.
-function appendCallHistoryEntry(phone, entry) {
-  const history = loadCallHistory();
+// Adds one compact entry to a lead's history. Scoped by userEmail (may be
+// null if we couldn't resolve who placed the call - see /call-status - in
+// which case it's just recorded without an owner rather than dropped).
+//
+// Database mode: a plain INSERT - no need to read existing rows first the
+// way the JSON file does, since a new row doesn't disturb any other row.
+// JSON-file mode: read-modify-write the whole file, same as before.
+async function appendCallHistoryEntry(userEmail, phone, entry) {
   const normalizedPhone = normalizePhoneNumber(phone);
+
+  if (db.isDatabaseMode) {
+    try {
+      await db.query(
+        `INSERT INTO call_history (user_email, phone, call_number, "date", temperature, headline, concern, outcome)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [userEmail, normalizedPhone, entry.callNumber, entry.date, entry.temperature, entry.headline, entry.concern, entry.outcome]
+      );
+    } catch (error) {
+      console.error("Failed to save call history entry to database:", error.message);
+    }
+    return;
+  }
+
+  let history;
+  try {
+    history = JSON.parse(fs.readFileSync(CALL_HISTORY_FILE_PATH, "utf8"));
+  } catch (error) {
+    history = {};
+  }
 
   if (!history[normalizedPhone]) {
     history[normalizedPhone] = [];
@@ -1486,17 +1597,17 @@ function appendCallHistoryEntry(phone, entry) {
 
 // After a call's per-call insights are generated, this:
 // 1. Saves a compact entry (date, call number, temperature, headline, key
-//    objection/outcome) to call-history.json - persisted, survives restarts.
+//    objection/outcome) to persistent storage (see appendCallHistoryEntry).
 // 2. If this ISN'T the lead's first call, asks the AI to fold this call into
 //    an updated "Previous Calls" narrative and writes it to the sheet.
 // On the first call (callNumber === 1), "Previous Calls" is left blank, per
 // the spec - there's no "relationship" to summarize yet.
 // Safe to call even if insights is null (the per-call AI attempt failed) -
 // there's nothing worth recording in that case, so this just does nothing.
-async function updateRelationshipHistory(sheets, sheetId, phone, insights, transcriptText, callNumber) {
+async function updateRelationshipHistory(userEmail, sheets, sheetId, phone, insights, transcriptText, callNumber) {
   if (!insights) return; // per-call AI attempt failed - nothing to record
 
-  appendCallHistoryEntry(phone, {
+  await appendCallHistoryEntry(userEmail, phone, {
     callNumber,
     date: new Date().toLocaleString(),
     temperature: insights.temperature,
@@ -1580,7 +1691,7 @@ app.post("/api/call", async (req, res) => {
   }
 
   try {
-    const user = getCurrentUser(req);
+    const user = await getCurrentUser(req);
     const call = await placeCall(to, user ? user.email : null);
     res.json({ success: true, callSid: call.sid });
   } catch (error) {
@@ -1605,7 +1716,7 @@ app.get("/api/test-call", async (req, res) => {
   }
 
   try {
-    const user = getCurrentUser(req);
+    const user = await getCurrentUser(req);
     const call = await placeCall(to, user ? user.email : null);
     res.json({ success: true, callSid: call.sid });
   } catch (error) {
@@ -1724,35 +1835,103 @@ const callTranscripts = new Map();
 // one FLAT list, and every single completed call gets exactly one entry
 // here, regardless of whether AI insights succeed - see /call-status below.
 
-// Where the per-call log is persisted, so it survives a restart.
+// Where the per-call log is persisted in JSON-file mode (local dev without
+// DATABASE_URL - see db.js). In database mode this file is never touched;
+// rows go in the call_log table instead, scoped by user_email - see
+// loadCallLog()/appendCallLogEntry() below.
 const CALL_LOG_FILE_PATH = path.join(__dirname, "call-log.json");
 
-// The seeded demo call log (see test-tools/seed-demo.js) - a separate file,
-// so demo mode's Analytics dashboard never reads your real call history.
+// The seeded demo call log (see test-tools/seed-demo.js) - static data
+// committed to the repo, not real user data, so this ALWAYS reads straight
+// from disk regardless of DATABASE_URL - demo mode never touches the
+// database at all, in either mode.
 const DEMO_CALL_LOG_FILE_PATH = path.join(__dirname, "call-log.demo.json");
 
-// Picks which of the two files above a request's Analytics data should
-// come from - same demo-vs-real idea as getSheetsContextForRequest() above.
-function callLogPathForRequest(req) {
-  return isDemoRequest(req) ? DEMO_CALL_LOG_FILE_PATH : CALL_LOG_FILE_PATH;
-}
-
-// Reads a whole call log file. Returns [] if it doesn't exist yet (e.g. the
-// very first call ever, or a demo log that hasn't been seeded) or can't be
-// parsed for some reason. Defaults to the real file, since the one caller
-// that doesn't pass a path explicitly (appendCallLogEntry below) only ever
-// runs for real calls.
-function loadCallLog(filePath = CALL_LOG_FILE_PATH) {
+function loadDemoCallLog() {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return JSON.parse(fs.readFileSync(DEMO_CALL_LOG_FILE_PATH, "utf8"));
   } catch (error) {
     return [];
   }
 }
 
-// Adds one call record to the log and saves the whole file back to disk.
-function appendCallLogEntry(entry) {
-  const log = loadCallLog();
+// Reads the REAL call log for one user. Returns [] if there's nothing yet
+// (or userEmail is null - see below) or something goes wrong reading it.
+//
+// Database mode: SELECT scoped to user_email, so each rep only ever sees
+// their own calls - previously call-log.json was one shared, unscoped file,
+// so every rep's stats were mixed together (the "global-stats problem").
+// JSON-file mode: still the single shared file, unscoped - fine for local,
+// single-operator development, which is what that mode is for.
+async function loadCallLog(userEmail) {
+  if (db.isDatabaseMode) {
+    // No email to scope by (e.g. an unresolvable /call-status callerEmail) -
+    // return nothing rather than guess at "everyone's calls".
+    if (!userEmail) return [];
+
+    try {
+      const result = await db.query(
+        `SELECT "timestamp", phone, name, outcome, connected, duration_seconds, temperature
+         FROM call_log WHERE user_email = $1 ORDER BY "timestamp"`,
+        [userEmail]
+      );
+      return result.rows.map((row) => ({
+        timestamp: row.timestamp.toISOString(),
+        phone: row.phone,
+        name: row.name,
+        outcome: row.outcome,
+        connected: row.connected,
+        durationSeconds: row.duration_seconds,
+        temperature: row.temperature,
+      }));
+    } catch (error) {
+      console.error("Failed to load call log from database:", error.message);
+      return [];
+    }
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(CALL_LOG_FILE_PATH, "utf8"));
+  } catch (error) {
+    return [];
+  }
+}
+
+// Resolves "the call log this request should see" - demo mode's seeded
+// file, or the signed-in user's own real calls. Used by /api/analytics,
+// /api/analytics/drilldown, and /api/profile so none of them need to
+// re-implement the demo-vs-real, database-vs-file branching themselves.
+async function getCallLogForRequest(req) {
+  if (isDemoRequest(req)) return loadDemoCallLog();
+
+  const user = await getCurrentUser(req);
+  return loadCallLog(user ? user.email : null);
+}
+
+// Adds one call record to the log. entry.userEmail scopes it to whichever
+// rep placed the call (see /call-status) - may be null if we couldn't
+// resolve who that was, in which case it's still logged, just unowned (and
+// won't show up in anyone's per-user stats in database mode).
+async function appendCallLogEntry(entry) {
+  if (db.isDatabaseMode) {
+    try {
+      await db.query(
+        `INSERT INTO call_log (user_email, "timestamp", phone, name, outcome, connected, duration_seconds, temperature)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [entry.userEmail || null, entry.timestamp, entry.phone, entry.name, entry.outcome, entry.connected, entry.durationSeconds, entry.temperature]
+      );
+    } catch (error) {
+      console.error("Failed to save call log entry to database:", error.message);
+    }
+    return;
+  }
+
+  let log;
+  try {
+    log = JSON.parse(fs.readFileSync(CALL_LOG_FILE_PATH, "utf8"));
+  } catch (error) {
+    log = [];
+  }
   log.push(entry);
 
   try {
@@ -1941,7 +2120,7 @@ function computeLeadReachBuckets(leads, filteredCalls) {
 //                                       together (e.g. 14-16 = 2pm-4pm)
 app.get("/api/analytics", async (req, res) => {
   try {
-    const log = loadCallLog(callLogPathForRequest(req));
+    const log = await getCallLogForRequest(req);
 
     // A plain date-only string like "2026-07-10" parses as UTC midnight if
     // we hand it to `new Date()` as-is, but "...T00:00:00" (no "Z"/offset)
@@ -2072,7 +2251,7 @@ app.get("/api/analytics/drilldown", async (req, res) => {
       return res.status(400).json({ error: "Unknown or missing 'bucket' parameter." });
     }
 
-    const log = loadCallLog(callLogPathForRequest(req));
+    const log = await getCallLogForRequest(req);
     const fromDate = req.query.from ? new Date(req.query.from + "T00:00:00") : null;
     const toDate = req.query.to ? new Date(req.query.to + "T23:59:59") : null;
     const hourFrom = req.query.hourFrom !== undefined ? parseInt(req.query.hourFrom, 10) : null;
@@ -2179,7 +2358,7 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
       ? await getLeadNameAndTemperature(sheetsContext.sheets, sheetsContext.sheetId, To)
       : { name: "", temperatureValue: null };
 
-    appendCallLogEntry({
+    await appendCallLogEntry({
       timestamp: new Date().toISOString(), // ISO so it sorts/parses reliably
       phone: normalizePhoneNumber(To),
       name,
@@ -2189,6 +2368,10 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
       // null if it's missing for some reason, rather than a fake 0.
       durationSeconds: CallDuration ? parseInt(CallDuration, 10) : null,
       temperature: temperatureValue,
+      // Whose call this was - lets /api/analytics and /api/profile show
+      // each rep only their OWN calls (see loadCallLog()). null if we
+      // couldn't resolve callerEmail above - still logged, just unowned.
+      userEmail: callerEmail || null,
     });
   } catch (error) {
     console.error("Failed to log call record:", error.message);
@@ -2226,7 +2409,7 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
 
         const transcriptText = transcriptLinesToText(transcriptLines);
         const insights = await generateAndSaveInsights(sheets, sheetId, To, transcriptText, callNumber);
-        await updateRelationshipHistory(sheets, sheetId, To, insights, transcriptText, callNumber);
+        await updateRelationshipHistory(callerEmail || null, sheets, sheetId, To, insights, transcriptText, callNumber);
       }
     } catch (error) {
       console.error("Failed to update sheet after call:", error.message);
@@ -2276,9 +2459,14 @@ app.post("/api/regenerate-insights", async (req, res) => {
     const attemptsCol = getColumnIndex(lead.headers, "attempts");
     const callNumber = parseInt(lead.row[attemptsCol], 10) || 1;
 
+    // Demo mode already returned above, so a real signed-in user should
+    // always be present here - but fall back to null rather than throw if
+    // the session somehow expired mid-request.
+    const currentUser = await getCurrentUser(req);
+
     const transcriptText = transcriptLinesToText(transcriptLines);
     const insights = await generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber);
-    await updateRelationshipHistory(sheets, sheetId, phone, insights, transcriptText, callNumber);
+    await updateRelationshipHistory(currentUser ? currentUser.email : null, sheets, sheetId, phone, insights, transcriptText, callNumber);
 
     res.json({ success: true, message: "AI insights regenerated." });
   } catch (error) {
@@ -2659,6 +2847,42 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+// Which persistence mode is active MATTERS a lot (see db.js) - JSON-file
+// mode quietly loses everything on a restart on a host with an ephemeral
+// filesystem (e.g. Render's free tier), so this is logged explicitly at
+// startup rather than left implicit in whether DATABASE_URL happens to be set.
+if (db.isDatabaseMode) {
+  console.log("Persistence: Postgres (DATABASE_URL is set) - users.json/call-log.json/call-history.json are not used for real data.");
+} else {
+  console.log(
+    "Persistence: local JSON files (DATABASE_URL is not set) - fine for local development, " +
+      "but data will NOT survive a restart on a host with an ephemeral filesystem (e.g. Render)."
+  );
+}
+
+async function startServer() {
+  if (db.isDatabaseMode) {
+    try {
+      await db.createTablesIfNotExist();
+      console.log("Database tables ready (created if they didn't already exist).");
+    } catch (error) {
+      // Don't crash the server if the database is briefly unavailable at
+      // startup - every route that touches the database already handles
+      // its OWN query failures gracefully (see auth.js and the call-log/
+      // call-history functions above), so the app still comes up; it just
+      // won't be able to read/write anything until the database is
+      // reachable, the same as it would for any query failure at runtime.
+      console.error(
+        "Could not verify/create database tables at startup - the server will keep starting, " +
+          "but requests that need the database may fail until this is resolved:",
+        error.message
+      );
+    }
+  }
+
+  server.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();
