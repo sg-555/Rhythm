@@ -430,10 +430,12 @@ async function addSheetForUser(email, sheetId, name) {
   return entry;
 }
 
-// Renames one of a user's sheets WITHIN RHYTHM ONLY - this is just the
-// display name shown in "My sheets", never the underlying Google file's own
-// title. Returns the updated entry, or null if that sheetId isn't actually
-// one of this user's sheets.
+// Renames one of a user's sheets in OUR OWN storage - just the display
+// name/createdAt record kept here, not the actual Google file's title
+// (server.js's POST /api/sheets/:sheetId/rename calls this AND separately
+// tries to rename the real Google Sheets file, so the two stay in sync).
+// Returns the updated entry, or null if that sheetId isn't actually one of
+// this user's sheets.
 async function renameSheetForUser(email, sheetId, newName) {
   if (db.isDatabaseMode) {
     try {

@@ -544,13 +544,15 @@ async function applyPhoneColumnPlainTextFormat(sheets, sheetId) {
 
 // Creates a brand-new Google Sheet in the user's OWN Drive - using THEIR
 // OAuth tokens (drive.file scope covers creating files this way), never the
-// service account - named "Rhythm Leads", with the correct header row.
-async function createRhythmSheetForUser(user) {
+// service account - with the correct header row. `name` becomes the actual
+// Google file's title AND the Rhythm-side display name (see the two
+// callers below), so they start out in sync.
+async function createRhythmSheetForUser(user, name) {
   const oauthClient = getUserOAuthClient(user);
   const sheets = google.sheets({ version: "v4", auth: oauthClient });
 
   const createResponse = await sheets.spreadsheets.create({
-    requestBody: { properties: { title: "Rhythm Leads" } },
+    requestBody: { properties: { title: name } },
   });
   const sheetId = createResponse.data.spreadsheetId;
 
@@ -591,7 +593,10 @@ app.post("/api/onboarding/create-sheet", async (req, res) => {
   }
 
   try {
-    const sheetId = await createRhythmSheetForUser(user);
+    // Onboarding stays frictionless - no name prompt, just a sensible
+    // default. Renaming (with the Google file kept in sync) is one click
+    // away afterward in "My sheets" if they want something different.
+    const sheetId = await createRhythmSheetForUser(user, "Rhythm Leads");
     await updateUserSheetId(user.email, sheetId);
     // createRhythmSheetForUser() already applied the plain-text Phone
     // format as part of creation - mark it done so getSheetsContextForUser()
@@ -630,15 +635,23 @@ app.get("/api/sheets", async (req, res) => {
 // create-sheet, this is NOT idempotent - it's "I'm done with my current
 // leads, give me a fresh sheet" - see the profile panel's "Create a new
 // sheet" button), adds it to the list, and makes it the active one.
+// Expects a JSON body like: { "name": "Rhythm Leads - Jul 24, 2026" } - the
+// frontend prompts for this (defaulting to that same date-stamped
+// suggestion) before calling here, since unlike onboarding, this ISN'T the
+// user's very first sheet, so a moment's naming friction is worth it to
+// keep sheets distinguishable later. Falls back to "Rhythm Leads" if the
+// name is somehow missing, just so this endpoint never hard-fails on that.
 app.post("/api/sheets", async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
 
+  const name = (req.body.name || "").trim() || "Rhythm Leads";
+
   try {
-    const sheetId = await createRhythmSheetForUser(user);
-    await addSheetForUser(user.email, sheetId, "Rhythm Leads");
+    const sheetId = await createRhythmSheetForUser(user, name);
+    await addSheetForUser(user.email, sheetId, name);
     await updateUserSheetId(user.email, sheetId);
     res.json({ success: true, sheetId });
   } catch (error) {
@@ -668,8 +681,9 @@ app.post("/api/sheets/:sheetId/activate", async (req, res) => {
   res.json({ success: true, sheetId });
 });
 
-// POST /api/sheets/:sheetId/rename: changes a sheet's DISPLAY NAME within
-// Rhythm only - never touches the underlying Google file's own title.
+// POST /api/sheets/:sheetId/rename: changes a sheet's display name, AND
+// tries to rename the actual Google Sheets file to match, so the two stay
+// in sync (the app created the file, so drive.file scope permits this).
 // Expects a JSON body like: { "name": "Q2 leads" }
 app.post("/api/sheets/:sheetId/rename", async (req, res) => {
   const user = await getCurrentUser(req);
@@ -683,12 +697,34 @@ app.post("/api/sheets/:sheetId/rename", async (req, res) => {
     return res.status(400).json({ error: "Request body must include a non-empty 'name'." });
   }
 
+  // The Rhythm-side rename is the one that must always stick - do it
+  // first, and never roll it back because of what happens next.
   const updated = await renameSheetForUser(user.email, sheetId, name);
   if (!updated) {
     return res.status(404).json({ error: "That sheet isn't in your list." });
   }
 
-  res.json({ success: true, sheet: updated });
+  // Best-effort: also rename the actual Google Sheets file. If this fails
+  // (revoked access, a transient API error, etc.) we still report success
+  // for the Rhythm-side rename above - just tell the rep the Google file
+  // itself is now out of sync, rather than hiding that or undoing a change
+  // that already succeeded.
+  let googleRenameError = null;
+  try {
+    const oauthClient = getUserOAuthClient(user);
+    const sheets = google.sheets({ version: "v4", auth: oauthClient });
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: sheetId,
+      requestBody: {
+        requests: [{ updateSpreadsheetProperties: { properties: { title: name }, fields: "title" } }],
+      },
+    });
+  } catch (error) {
+    console.error("Could not rename the Google Sheets file", sheetId, "-", error.message);
+    googleRenameError = "Renamed in Rhythm, but couldn't rename the Google Sheets file itself: " + error.message;
+  }
+
+  res.json({ success: true, sheet: updated, googleRenameError });
 });
 
 // /api/leads: reads every row from the sheet and returns them as JSON.

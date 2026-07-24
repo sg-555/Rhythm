@@ -573,8 +573,12 @@
     }
 
     /* ── "My sheets" (profile panel) ──────────────────────────────────────
-       One row per sheet the user has, plus a "Create a new sheet" button
-       below the list. */
+       One row per sheet: name (+ rename pencil, + "Active" badge if it's
+       the one the app's working off) on the left, a single "Switch to this
+       sheet" action on the right for every OTHER sheet - deliberately just
+       one clear thing per row. "Open in Google Sheets" isn't repeated per
+       row - the single link at the top of the panel always opens whichever
+       sheet is active. Plus a "Create a new sheet" button below the list. */
     .sheets-list {
       display: flex;
       flex-direction: column;
@@ -584,7 +588,9 @@
 
     .sheet-row {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
       gap: var(--sp-2);
       background: var(--bg-page);
       border: 1px solid var(--border);
@@ -615,25 +621,21 @@
       padding: 2px var(--sp-2);
     }
 
-    .sheet-row-actions {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: var(--sp-2);
+    /* The pencil "rename" icon - quiet by default, a little more visible on
+       hover, so it reads as available without competing with the name. */
+    .sheet-rename-icon-button {
+      font-size: 0.85rem;
+      line-height: 1;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity var(--transition);
     }
 
-    /* "Open in Google Sheets" - a plain link, not a button, since it's just
-       navigation (opens in a new tab), same treatment as other quiet links
-       in this app. */
-    .sheet-row-link {
-      font-size: var(--text-meta);
-      font-weight: 600;
-      color: var(--interactive);
-      text-decoration: none;
-    }
-
-    .sheet-row-link:hover {
-      text-decoration: underline;
+    .sheet-rename-icon-button:hover {
+      opacity: 1;
     }
 
     /* All-time stats - numbers get the display font + tabular figures, same
@@ -2136,10 +2138,60 @@
       return typeof isInCall !== "undefined" && isInCall;
     }
 
-    // Builds the "My sheets" section: one row per sheet (name + "Active"
-    // badge, Open/Rename/Switch), plus a "Create a new sheet" button below
-    // the list. sheets is the array GET /api/sheets returned; activeSheetId
-    // is profile.sheetId (the one the rest of the app currently works off).
+    // "Rhythm Leads — Jul 24, 2026" - the suggested name for an additional
+    // sheet (see the "Create a new sheet" button below). Onboarding's
+    // FIRST sheet skips this entirely and just uses plain "Rhythm Leads" -
+    // only additional sheets get date-stamped, since that's what makes
+    // several of them distinguishable later.
+    function defaultNewSheetName() {
+      const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      return `Rhythm Leads — ${today}`;
+    }
+
+    // Prompts for a new name for one sheet and saves it - shared by the
+    // rename pencil icon (existing sheet) below. Renaming ALSO tries to
+    // rename the actual Google Sheets file to match (see POST /api/sheets/
+    // :sheetId/rename) - if that part fails, the Rhythm-side name still
+    // sticks, and the response's googleRenameError explains what happened
+    // instead of that failure being silent.
+    async function promptToRenameSheet(sheet, nameText, status) {
+      // A plain prompt() just for gathering the new name - simplest
+      // possible text input, with no existing modal/dialog component in
+      // this app worth building just for this.
+      const newName = prompt("Rename this sheet:", sheet.name);
+      if (newName === null) return; // cancelled
+
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === sheet.name) return;
+
+      status.textContent = "Renaming...";
+      try {
+        const response = await fetch(`/api/sheets/${encodeURIComponent(sheet.sheetId)}/rename`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmed }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not rename sheet.");
+        sheet.name = trimmed;
+        nameText.textContent = trimmed;
+        // googleRenameError is set when the Rhythm-side rename worked but
+        // renaming the actual Google file failed - still worth surfacing,
+        // not just swallowed, per the "don't fail silently" instruction.
+        status.textContent = data.googleRenameError || "Renamed.";
+      } catch (error) {
+        status.textContent = "Error: " + error.message;
+      }
+    }
+
+    // Builds the "My sheets" section: one row per sheet - name (with a
+    // rename pencil) + "Active" badge, and a "Switch to this sheet" action
+    // on every OTHER sheet - plus a "Create a new sheet" button below the
+    // list. Deliberately just ONE clear action per row - "Open in Google
+    // Sheets" isn't repeated here, since the single link at the top of the
+    // panel already always opens whichever sheet is active. sheets is the
+    // array GET /api/sheets returned; activeSheetId is profile.sheetId (the
+    // one the rest of the app currently works off).
     function renderSheetsSection(sheets, activeSheetId) {
       const container = document.createElement("div");
 
@@ -2165,6 +2217,15 @@
         nameText.textContent = sheet.name;
         nameLine.appendChild(nameText);
 
+        const renameIconButton = document.createElement("button");
+        renameIconButton.type = "button";
+        renameIconButton.className = "sheet-rename-icon-button";
+        renameIconButton.textContent = "✏️";
+        renameIconButton.setAttribute("aria-label", "Rename this sheet");
+        renameIconButton.title = "Rename";
+        renameIconButton.addEventListener("click", () => promptToRenameSheet(sheet, nameText, status));
+        nameLine.appendChild(renameIconButton);
+
         if (isActive) {
           const badge = document.createElement("span");
           badge.className = "sheet-active-badge";
@@ -2173,49 +2234,6 @@
         }
 
         row.appendChild(nameLine);
-
-        const actions = document.createElement("div");
-        actions.className = "sheet-row-actions";
-
-        const openLink = document.createElement("a");
-        openLink.href = sheetUrlFor(sheet.sheetId);
-        openLink.target = "_blank";
-        openLink.rel = "noopener";
-        openLink.className = "sheet-row-link";
-        openLink.textContent = "Open in Google Sheets";
-        actions.appendChild(openLink);
-
-        const renameButton = document.createElement("button");
-        renameButton.type = "button";
-        renameButton.className = "btn-secondary";
-        renameButton.textContent = "Rename";
-        renameButton.addEventListener("click", async () => {
-          // A plain prompt() just for gathering the new name - simplest
-          // possible text input, with no existing modal/dialog component in
-          // this app worth building just for this.
-          const newName = prompt("Rename this sheet (just within Rhythm - it won't rename the Google file itself):", sheet.name);
-          if (newName === null) return; // cancelled
-
-          const trimmed = newName.trim();
-          if (!trimmed || trimmed === sheet.name) return;
-
-          status.textContent = "Renaming...";
-          try {
-            const response = await fetch(`/api/sheets/${encodeURIComponent(sheet.sheetId)}/rename`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: trimmed }),
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || "Could not rename sheet.");
-            sheet.name = trimmed;
-            nameText.textContent = trimmed;
-            status.textContent = "Renamed.";
-          } catch (error) {
-            status.textContent = "Error: " + error.message;
-          }
-        });
-        actions.appendChild(renameButton);
 
         // No "Switch" button on the sheet that's already active - there's
         // nothing to switch TO.
@@ -2244,10 +2262,9 @@
               status.textContent = "Error: " + error.message;
             }
           });
-          actions.appendChild(switchButton);
+          row.appendChild(switchButton);
         }
 
-        row.appendChild(actions);
         list.appendChild(row);
       });
 
@@ -2263,11 +2280,23 @@
           return;
         }
 
+        // Unlike onboarding's first sheet, an ADDITIONAL sheet is worth a
+        // moment's naming friction, so sheets stay distinguishable later -
+        // defaults to a date-stamped suggestion rather than a blank box.
+        const suggested = defaultNewSheetName();
+        const name = prompt("Name this new sheet:", suggested);
+        if (name === null) return; // cancelled
+        const trimmed = name.trim() || suggested;
+
         createButton.disabled = true;
         createButton.textContent = "Creating...";
         status.textContent = "";
         try {
-          const response = await fetch("/api/sheets", { method: "POST" });
+          const response = await fetch("/api/sheets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: trimmed }),
+          });
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "Could not create a new sheet.");
           reloadForSheetChange(); // same reasoning as switching - start clean

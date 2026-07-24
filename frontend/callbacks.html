@@ -530,7 +530,9 @@
 
     .sheet-row {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
       gap: var(--sp-2);
       background: var(--bg-page);
       border: 1px solid var(--border);
@@ -559,22 +561,19 @@
       padding: 2px var(--sp-2);
     }
 
-    .sheet-row-actions {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: var(--sp-2);
+    .sheet-rename-icon-button {
+      font-size: 0.85rem;
+      line-height: 1;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity var(--transition);
     }
 
-    .sheet-row-link {
-      font-size: var(--text-meta);
-      font-weight: 600;
-      color: var(--interactive);
-      text-decoration: none;
-    }
-
-    .sheet-row-link:hover {
-      text-decoration: underline;
+    .sheet-rename-icon-button:hover {
+      opacity: 1;
     }
 
     .profile-stats-grid {
@@ -1661,6 +1660,40 @@
       return typeof isInCall !== "undefined" && isInCall;
     }
 
+    // Suggested name for an ADDITIONAL sheet - see index.html's copy of
+    // this for the full explanation (onboarding's first sheet doesn't use this).
+    function defaultNewSheetName() {
+      const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+      return `Rhythm Leads — ${today}`;
+    }
+
+    // Prompts for and saves a sheet's new name - see index.html's copy of
+    // this for the full explanation (including how a failed Google-side
+    // rename is surfaced, not swallowed).
+    async function promptToRenameSheet(sheet, nameText, status) {
+      const newName = prompt("Rename this sheet:", sheet.name);
+      if (newName === null) return;
+
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === sheet.name) return;
+
+      status.textContent = "Renaming...";
+      try {
+        const response = await fetch(`/api/sheets/${encodeURIComponent(sheet.sheetId)}/rename`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmed }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not rename sheet.");
+        sheet.name = trimmed;
+        nameText.textContent = trimmed;
+        status.textContent = data.googleRenameError || "Renamed.";
+      } catch (error) {
+        status.textContent = "Error: " + error.message;
+      }
+    }
+
     // Builds the "My sheets" section - see index.html's copy of this for
     // the full explanation.
     function renderSheetsSection(sheets, activeSheetId) {
@@ -1685,6 +1718,15 @@
         nameText.textContent = sheet.name;
         nameLine.appendChild(nameText);
 
+        const renameIconButton = document.createElement("button");
+        renameIconButton.type = "button";
+        renameIconButton.className = "sheet-rename-icon-button";
+        renameIconButton.textContent = "✏️";
+        renameIconButton.setAttribute("aria-label", "Rename this sheet");
+        renameIconButton.title = "Rename";
+        renameIconButton.addEventListener("click", () => promptToRenameSheet(sheet, nameText, status));
+        nameLine.appendChild(renameIconButton);
+
         if (isActive) {
           const badge = document.createElement("span");
           badge.className = "sheet-active-badge";
@@ -1693,46 +1735,6 @@
         }
 
         row.appendChild(nameLine);
-
-        const actions = document.createElement("div");
-        actions.className = "sheet-row-actions";
-
-        const openLink = document.createElement("a");
-        openLink.href = sheetUrlFor(sheet.sheetId);
-        openLink.target = "_blank";
-        openLink.rel = "noopener";
-        openLink.className = "sheet-row-link";
-        openLink.textContent = "Open in Google Sheets";
-        actions.appendChild(openLink);
-
-        const renameButton = document.createElement("button");
-        renameButton.type = "button";
-        renameButton.className = "btn-secondary";
-        renameButton.textContent = "Rename";
-        renameButton.addEventListener("click", async () => {
-          const newName = prompt("Rename this sheet (just within Rhythm - it won't rename the Google file itself):", sheet.name);
-          if (newName === null) return;
-
-          const trimmed = newName.trim();
-          if (!trimmed || trimmed === sheet.name) return;
-
-          status.textContent = "Renaming...";
-          try {
-            const response = await fetch(`/api/sheets/${encodeURIComponent(sheet.sheetId)}/rename`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: trimmed }),
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || "Could not rename sheet.");
-            sheet.name = trimmed;
-            nameText.textContent = trimmed;
-            status.textContent = "Renamed.";
-          } catch (error) {
-            status.textContent = "Error: " + error.message;
-          }
-        });
-        actions.appendChild(renameButton);
 
         if (!isActive) {
           const switchButton = document.createElement("button");
@@ -1759,10 +1761,9 @@
               status.textContent = "Error: " + error.message;
             }
           });
-          actions.appendChild(switchButton);
+          row.appendChild(switchButton);
         }
 
-        row.appendChild(actions);
         list.appendChild(row);
       });
 
@@ -1778,11 +1779,20 @@
           return;
         }
 
+        const suggested = defaultNewSheetName();
+        const name = prompt("Name this new sheet:", suggested);
+        if (name === null) return;
+        const trimmed = name.trim() || suggested;
+
         createButton.disabled = true;
         createButton.textContent = "Creating...";
         status.textContent = "";
         try {
-          const response = await fetch("/api/sheets", { method: "POST" });
+          const response = await fetch("/api/sheets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: trimmed }),
+          });
           const data = await response.json();
           if (!response.ok) throw new Error(data.error || "Could not create a new sheet.");
           reloadForSheetChange();
