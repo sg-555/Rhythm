@@ -53,7 +53,15 @@ const {
   setSessionCookie,
   clearSessionCookie,
 } = require("./auth");
-const { isDemoRequest, setDemoCookie, clearDemoCookie } = require("./demo");
+const {
+  isDemoRequest,
+  setDemoCookie,
+  clearDemoCookie,
+  DEMO_SHEETS,
+  getDemoActiveSheetId,
+  setDemoActiveSheetCookie,
+  clearDemoActiveSheetCookie,
+} = require("./demo");
 const db = require("./db");
 
 const app = express();
@@ -110,6 +118,7 @@ app.get("/auth/google/callback", async (req, res) => {
     const sessionId = createSession(profile.email);
     setSessionCookie(res, sessionId);
     clearDemoCookie(res); // a real sign-in always replaces demo mode, never layers on top of it
+    clearDemoActiveSheetCookie(res);
 
     res.redirect("/"); // back to the app - now signed in
   } catch (err) {
@@ -159,6 +168,7 @@ app.get("/demo", (req, res) => {
 // POST /demo/exit: leaves demo mode (the "Exit demo" button).
 app.post("/demo/exit", (req, res) => {
   clearDemoCookie(res);
+  clearDemoActiveSheetCookie(res);
   res.json({ ok: true });
 });
 
@@ -415,6 +425,17 @@ async function getSheetsContextForRequest(req) {
   return getSheetsContextForUser(user);
 }
 
+// Demo mode only: splits the one seeded demo sheet's rows into three
+// roughly-even, STABLE subsets by row position, so "My sheets" can offer
+// three fake sheets (see DEMO_SHEETS in demo.js) that a visitor can
+// genuinely switch between and see different leads. Real users never hit
+// this - they simply have separate, real Google Sheets.
+function partitionDemoRows(rows, activeDemoSheetId) {
+  const bucketIndex = DEMO_SHEETS.findIndex((sheet) => sheet.sheetId === activeDemoSheetId);
+  const bucket = bucketIndex === -1 ? 0 : bucketIndex;
+  return rows.filter((_, index) => index % DEMO_SHEETS.length === bucket);
+}
+
 // Resolves { sheets, sheetId } from an EMAIL directly rather than a request -
 // needed for the Twilio call-status webhook, which Twilio calls server-to-
 // server with no browser session/cookie at all. See the /voice and
@@ -622,6 +643,13 @@ app.post("/api/onboarding/create-sheet", async (req, res) => {
 
 // GET /api/sheets: this user's full list, plus which one is active.
 app.get("/api/sheets", async (req, res) => {
+  // Demo mode: three fake sheets (see DEMO_SHEETS in demo.js), no real
+  // signed-in user required - the "active" one is just remembered in a
+  // cookie (see getDemoActiveSheetId).
+  if (isDemoRequest(req)) {
+    return res.json({ sheets: DEMO_SHEETS, activeSheetId: getDemoActiveSheetId(req) });
+  }
+
   const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
@@ -665,12 +693,26 @@ app.post("/api/sheets", async (req, res) => {
 // screen. Always checks the sheetId is actually one of THIS user's own
 // sheets first - never blindly trust an id from the URL.
 app.post("/api/sheets/:sheetId/activate", async (req, res) => {
+  const { sheetId } = req.params;
+
+  // Demo mode: just remember which of the three fake sheets is active in a
+  // cookie - there's no real per-user storage to update. This is what
+  // actually makes switching "genuinely work" in demo mode (see
+  // partitionDemoRows() and GET /api/leads above).
+  if (isDemoRequest(req)) {
+    const isDemoSheet = DEMO_SHEETS.some((sheet) => sheet.sheetId === sheetId);
+    if (!isDemoSheet) {
+      return res.status(404).json({ error: "That sheet isn't in the demo." });
+    }
+    setDemoActiveSheetCookie(res, sheetId);
+    return res.json({ success: true, sheetId });
+  }
+
   const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
 
-  const { sheetId } = req.params;
   const sheets = await getSheetsForUser(user.email);
   const owned = sheets.some((sheet) => sheet.sheetId === sheetId);
   if (!owned) {
@@ -735,7 +777,13 @@ app.get("/api/leads", async (req, res) => {
     // getSheetsContextForRequest() above, the one place this is resolved.
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
-    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
+    const loaded = await loadSheetRows(sheets, sheetId);
+    const headers = loaded.headers;
+    // Demo mode: only show the rows belonging to whichever of the three
+    // fake demo sheets is currently active - see partitionDemoRows() above.
+    const dataRows = isDemoRequest(req)
+      ? partitionDemoRows(loaded.dataRows, getDemoActiveSheetId(req))
+      : loaded.dataRows;
 
     // Look up each column's position by header name, using SHEET_CONFIG.
     const nameCol = getColumnIndex(headers, "name");
@@ -795,7 +843,13 @@ app.get("/api/leads/due", async (req, res) => {
   try {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
-    const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
+    const loaded = await loadSheetRows(sheets, sheetId);
+    const headers = loaded.headers;
+    // Demo mode: same partitioning as GET /api/leads, so the due-for-
+    // callback list matches whichever demo sheet is currently active.
+    const dataRows = isDemoRequest(req)
+      ? partitionDemoRows(loaded.dataRows, getDemoActiveSheetId(req))
+      : loaded.dataRows;
 
     const nameCol = getColumnIndex(headers, "name");
     const phoneCol = getColumnIndex(headers, "phone");

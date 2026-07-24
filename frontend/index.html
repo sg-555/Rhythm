@@ -638,6 +638,15 @@
       opacity: 1;
     }
 
+    /* Demo mode's stand-in for "Create a new sheet" - explains why that
+       option isn't here instead of just hiding it silently. */
+    .sheets-demo-note {
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      line-height: 1.5;
+      margin: 0 0 var(--sp-3) 0;
+    }
+
     /* All-time stats - numbers get the display font + tabular figures, same
        treatment as the Analytics dashboard's metric tiles. */
     .profile-stats-grid {
@@ -702,7 +711,11 @@
     }
 
     /* The sign-in screen is the first impression - clean, spacious,
-       confident. Wider and more generously padded than a bare dialog. */
+       confident. Wider and more generously padded than a bare dialog.
+       This bare form is still used as-is by the onboarding card (see
+       .onboarding-card / #onboardingOverlay) - the split, two-column
+       layout below is a MODIFIER (.sign-in-card--split) added only for
+       the actual sign-in overlay, so it doesn't affect that card. */
     .sign-in-card {
       background: var(--bg-surface);
       border-radius: var(--radius-lg);
@@ -710,6 +723,55 @@
       padding: 3.5rem 3.5rem;
       text-align: center;
       max-width: 440px;
+    }
+
+    /* Splits the sign-in card into two columns: brand/pitch on the left,
+       actions on the right, divided by a thin vertical rule. Stacks to a
+       single column on narrow screens - see the media query below. */
+    .sign-in-card--split {
+      max-width: 780px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 3.5rem;
+      text-align: left;
+    }
+
+    .signin-left {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .signin-divider {
+      align-self: stretch;
+      width: 1px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .signin-right {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-3);
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .sign-in-card--split {
+        flex-direction: column;
+        gap: var(--sp-5);
+      }
+
+      .signin-left {
+        text-align: center;
+      }
+
+      .signin-divider {
+        width: 100%;
+        height: 1px;
+      }
     }
 
     /* Product wordmark - larger than the top bar's version, same treatment. */
@@ -759,20 +821,33 @@
       background: var(--interactive-hover);
     }
 
-    /* Secondary option on the sign-in card - links straight to GET /demo.
-       Deliberately quiet (plain text link) next to the primary button. */
-    .view-demo-button {
-      display: inline-block;
-      margin-top: var(--sp-4);
-      color: var(--ink-muted);
+    /* Sign in with Google and View demo on the split sign-in screen -
+       deliberately IDENTICAL styling. Demo is the main route for most
+       visitors, so neither gets a primary/secondary treatment; they're
+       two equally weighted buttons. */
+    .signin-action-button {
+      display: block;
+      background: var(--interactive);
+      color: var(--on-interactive);
       text-decoration: none;
+      text-align: center;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
+      padding: var(--sp-3) var(--sp-6);
+      border-radius: var(--radius-sm);
+      transition: background var(--transition);
     }
 
-    .view-demo-button:hover {
-      color: var(--interactive);
-      text-decoration: underline;
+    .signin-action-button:hover {
+      background: var(--interactive-hover);
+    }
+
+    /* Quiet caption under the two actions - no call-to-action, just context. */
+    .signin-fineprint {
+      margin: var(--sp-2) 0 0 0;
+      color: var(--ink-faint);
+      font-size: 0.8rem;
+      line-height: 1.5;
     }
 
     /* ── Onboarding screen ────────────────────────────────────────────────
@@ -1747,15 +1822,20 @@
        see checkSignedIn(). Sits on top of everything else via CSS, so we
        don't need to touch any of the rest of this page's markup. -->
   <div id="signInOverlay" class="sign-in-overlay">
-    <div class="sign-in-card">
-      <div class="signin-wordmark">Rhythm<span class="brand-suffix">.ai</span></div>
-      <h1 class="signin-headline">Find your rhythm. Close more.</h1>
-      <p class="signin-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
-      <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
-      <br />
-      <!-- GET /demo marks this browser as being in demo mode, then sends it
-           back here - see app.get("/demo", ...) in server.js. -->
-      <a href="/demo" class="view-demo-button">View Demo</a>
+    <div class="sign-in-card sign-in-card--split">
+      <div class="signin-left">
+        <div class="signin-wordmark">Rhythm<span class="brand-suffix">.ai</span></div>
+        <h1 class="signin-headline">Find your rhythm. Close more.</h1>
+        <p class="signin-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
+      </div>
+      <div class="signin-divider"></div>
+      <div class="signin-right">
+        <a href="/auth/google" class="signin-action-button">Sign in with Google</a>
+        <!-- GET /demo marks this browser as being in demo mode, then sends it
+             back here - see app.get("/demo", ...) in server.js. -->
+        <a href="/demo" class="signin-action-button">View demo</a>
+        <p class="signin-fineprint">Sign-in is limited to invited users. Explore the demo - it's the full product with sample data.</p>
+      </div>
     </div>
   </div>
 
@@ -2148,12 +2228,28 @@
       return `Rhythm Leads — ${today}`;
     }
 
+    // Demo-mode-only rename: purely cosmetic and kept in the browser for
+    // this session only - no backend call, no Google Sheets change, nothing
+    // persisted. It's gone the next time the page reloads, which is fine -
+    // there's no real sheet behind it to keep in sync.
+    function promptToRenameDemoSheet(sheet, nameText) {
+      const newName = prompt("Rename this sheet:", sheet.name);
+      if (newName === null) return; // cancelled
+
+      const trimmed = newName.trim();
+      if (!trimmed) return;
+
+      sheet.name = trimmed;
+      nameText.textContent = trimmed;
+    }
+
     // Prompts for a new name for one sheet and saves it - shared by the
     // rename pencil icon (existing sheet) below. Renaming ALSO tries to
     // rename the actual Google Sheets file to match (see POST /api/sheets/
     // :sheetId/rename) - if that part fails, the Rhythm-side name still
     // sticks, and the response's googleRenameError explains what happened
-    // instead of that failure being silent.
+    // instead of that failure being silent. Not used in demo mode - see
+    // promptToRenameDemoSheet above.
     async function promptToRenameSheet(sheet, nameText, status) {
       // A plain prompt() just for gathering the new name - simplest
       // possible text input, with no existing modal/dialog component in
@@ -2190,8 +2286,12 @@
     // list. Deliberately just ONE clear action per row - "Open in Google
     // Sheets" isn't repeated here, since the single link at the top of the
     // panel already always opens whichever sheet is active. sheets is the
-    // array GET /api/sheets returned; activeSheetId is profile.sheetId (the
-    // one the rest of the app currently works off).
+    // array GET /api/sheets returned; activeSheetId is whichever one GET
+    // /api/sheets says is active (a real user's own sheetId, or the demo's
+    // cookie-remembered choice - see openProfilePanel()).
+    // In demo mode, "Create a new sheet" is replaced by a quiet explanatory
+    // note, and the rename pencil is wired to a browser-only stand-in - see
+    // promptToRenameDemoSheet above.
     function renderSheetsSection(sheets, activeSheetId) {
       const container = document.createElement("div");
 
@@ -2223,7 +2323,9 @@
         renameIconButton.textContent = "✏️";
         renameIconButton.setAttribute("aria-label", "Rename this sheet");
         renameIconButton.title = "Rename";
-        renameIconButton.addEventListener("click", () => promptToRenameSheet(sheet, nameText, status));
+        renameIconButton.addEventListener("click", () =>
+          demoMode ? promptToRenameDemoSheet(sheet, nameText) : promptToRenameSheet(sheet, nameText, status)
+        );
         nameLine.appendChild(renameIconButton);
 
         if (isActive) {
@@ -2270,6 +2372,19 @@
 
       container.appendChild(list);
 
+      // Demo mode: no "Create a new sheet" - there's nothing real to create.
+      // A quiet note explains why instead, with no sign-in call-to-action -
+      // the visitor is already exploring the demo.
+      if (demoMode) {
+        const demoNote = document.createElement("p");
+        demoNote.className = "sheets-demo-note";
+        demoNote.textContent =
+          "You're exploring a demo with sample data. Creating and managing your own sheets is part of the full product.";
+        container.appendChild(demoNote);
+        container.appendChild(status);
+        return container;
+      }
+
       const createButton = document.createElement("button");
       createButton.type = "button";
       createButton.className = "btn-secondary";
@@ -2315,7 +2430,7 @@
     // Builds the panel's contents from GET /api/profile's response. Reuses
     // makeSection()/makeSectionTitle() from the lead detail panel below, so
     // section spacing/dividers match exactly.
-    function renderProfilePanel(profile, sheets) {
+    function renderProfilePanel(profile, sheets, activeSheetId) {
       profilePanelContent.innerHTML = "";
 
       const header = document.createElement("div");
@@ -2352,7 +2467,7 @@
         openSheetLink.target = "_blank";
         openSheetLink.rel = "noopener";
         openSheetLink.className = "sheet-link-button";
-        openSheetLink.textContent = "Open my sheet";
+        openSheetLink.textContent = "Open active sheet";
         profilePanelContent.appendChild(openSheetLink);
       }
 
@@ -2408,11 +2523,10 @@
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
-      // "My sheets" - not shown in demo mode (openProfilePanel() only
-      // fetches the list for a real signed-in user, so sheets is just []
-      // there, and this section is skipped entirely rather than shown empty).
-      if (!demoMode && sheets && sheets.length > 0) {
-        profilePanelContent.appendChild(makeSection("My sheets", renderSheetsSection(sheets, profile.sheetId)));
+      // "My sheets" - shown in demo mode too now, with three fake sheets
+      // (see GET /api/sheets) and fewer actions - see renderSheetsSection().
+      if (sheets && sheets.length > 0) {
+        profilePanelContent.appendChild(makeSection("My sheets", renderSheetsSection(sheets, activeSheetId)));
       }
 
       // All-time personal stats - see GET /api/profile in server.js for
@@ -2506,21 +2620,24 @@
         const profile = await response.json();
         if (!response.ok) throw new Error(profile.error || "Could not load profile.");
 
-        // Demo mode has no real per-user sheets to manage - "My sheets"
-        // only ever shows for a real signed-in user (see renderProfilePanel).
+        // GET /api/sheets works in demo mode too (it hands back the three
+        // fake demo sheets instead of a real user's own list - see
+        // server.js), so this is no longer skipped for demoMode.
         let sheets = [];
-        if (!demoMode) {
-          try {
-            const sheetsResponse = await fetch("/api/sheets");
-            const sheetsData = await sheetsResponse.json();
-            if (sheetsResponse.ok) sheets = sheetsData.sheets;
-          } catch (error) {
-            // Non-critical - the rest of the profile panel still works
-            // without the sheets list, it just won't show "My sheets".
+        let activeSheetId = profile.sheetId;
+        try {
+          const sheetsResponse = await fetch("/api/sheets");
+          const sheetsData = await sheetsResponse.json();
+          if (sheetsResponse.ok) {
+            sheets = sheetsData.sheets;
+            activeSheetId = sheetsData.activeSheetId;
           }
+        } catch (error) {
+          // Non-critical - the rest of the profile panel still works
+          // without the sheets list, it just won't show "My sheets".
         }
 
-        renderProfilePanel(profile, sheets);
+        renderProfilePanel(profile, sheets, activeSheetId);
       } catch (error) {
         profilePanelContent.textContent = "Couldn't load profile: " + error.message;
       }
@@ -2743,7 +2860,7 @@
         openSheetLink.target = "_blank";
         openSheetLink.rel = "noopener";
         openSheetLink.className = "sheet-link-button";
-        openSheetLink.textContent = "Open my sheet";
+        openSheetLink.textContent = "Open active sheet";
         panel.appendChild(openSheetLink);
       }
 

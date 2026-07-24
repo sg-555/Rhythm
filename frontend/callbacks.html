@@ -576,6 +576,15 @@
       opacity: 1;
     }
 
+    /* Demo mode's stand-in for "Create a new sheet" - explains why that
+       option isn't here instead of just hiding it silently. */
+    .sheets-demo-note {
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      line-height: 1.5;
+      margin: 0 0 var(--sp-3) 0;
+    }
+
     .profile-stats-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -636,7 +645,10 @@
     }
 
     /* The sign-in screen is the first impression - clean, spacious,
-       confident. Same treatment as index.html's. */
+       confident. Same treatment as index.html's. This bare form is still
+       used as-is by the onboarding card (#onboardingOverlay below) - the
+       split, two-column layout is a MODIFIER (.sign-in-card--split) added
+       only for the actual sign-in overlay, so it doesn't affect that card. */
     .sign-in-card {
       background: var(--bg-surface);
       border-radius: var(--radius-lg);
@@ -644,6 +656,55 @@
       padding: 3.5rem 3.5rem;
       text-align: center;
       max-width: 440px;
+    }
+
+    /* Splits the sign-in card into two columns: brand/pitch on the left,
+       actions on the right, divided by a thin vertical rule. Stacks to a
+       single column on narrow screens - see the media query below. */
+    .sign-in-card--split {
+      max-width: 780px;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 3.5rem;
+      text-align: left;
+    }
+
+    .signin-left {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .signin-divider {
+      align-self: stretch;
+      width: 1px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    .signin-right {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--sp-3);
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .sign-in-card--split {
+        flex-direction: column;
+        gap: var(--sp-5);
+      }
+
+      .signin-left {
+        text-align: center;
+      }
+
+      .signin-divider {
+        width: 100%;
+        height: 1px;
+      }
     }
 
     .signin-wordmark {
@@ -692,19 +753,32 @@
       background: var(--interactive-hover);
     }
 
-    /* Secondary option on the sign-in card - links straight to GET /demo. */
-    .view-demo-button {
-      display: inline-block;
-      margin-top: var(--sp-4);
-      color: var(--ink-muted);
+    /* Sign in with Google and View demo on the split sign-in screen -
+       deliberately IDENTICAL styling; neither gets a primary/secondary
+       treatment, they're two equally weighted buttons. */
+    .signin-action-button {
+      display: block;
+      background: var(--interactive);
+      color: var(--on-interactive);
       text-decoration: none;
+      text-align: center;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
+      padding: var(--sp-3) var(--sp-6);
+      border-radius: var(--radius-sm);
+      transition: background var(--transition);
     }
 
-    .view-demo-button:hover {
-      color: var(--interactive);
-      text-decoration: underline;
+    .signin-action-button:hover {
+      background: var(--interactive-hover);
+    }
+
+    /* Quiet caption under the two actions - no call-to-action, just context. */
+    .signin-fineprint {
+      margin: var(--sp-2) 0 0 0;
+      color: var(--ink-faint);
+      font-size: 0.8rem;
+      line-height: 1.5;
     }
 
     /* Always-visible strip while in DEMO MODE - see checkSignedIn(). */
@@ -1340,13 +1414,18 @@
   <!-- Shown INSTEAD of the app until GET /api/me says someone's signed in -
        see checkSignedIn(). -->
   <div id="signInOverlay" class="sign-in-overlay">
-    <div class="sign-in-card">
-      <div class="signin-wordmark">Rhythm<span class="brand-suffix">.ai</span></div>
-      <h1 class="signin-headline">Find your rhythm. Close more.</h1>
-      <p class="signin-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
-      <a href="/auth/google" class="google-signin-button">Sign in with Google</a>
-      <br />
-      <a href="/demo" class="view-demo-button">View Demo</a>
+    <div class="sign-in-card sign-in-card--split">
+      <div class="signin-left">
+        <div class="signin-wordmark">Rhythm<span class="brand-suffix">.ai</span></div>
+        <h1 class="signin-headline">Find your rhythm. Close more.</h1>
+        <p class="signin-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
+      </div>
+      <div class="signin-divider"></div>
+      <div class="signin-right">
+        <a href="/auth/google" class="signin-action-button">Sign in with Google</a>
+        <a href="/demo" class="signin-action-button">View demo</a>
+        <p class="signin-fineprint">Sign-in is limited to invited users. Explore the demo - it's the full product with sample data.</p>
+      </div>
     </div>
   </div>
 
@@ -1667,9 +1746,23 @@
       return `Rhythm Leads — ${today}`;
     }
 
+    // Demo-mode-only rename - browser-only for this session, no backend
+    // call. See index.html's copy of this for the full explanation.
+    function promptToRenameDemoSheet(sheet, nameText) {
+      const newName = prompt("Rename this sheet:", sheet.name);
+      if (newName === null) return;
+
+      const trimmed = newName.trim();
+      if (!trimmed) return;
+
+      sheet.name = trimmed;
+      nameText.textContent = trimmed;
+    }
+
     // Prompts for and saves a sheet's new name - see index.html's copy of
     // this for the full explanation (including how a failed Google-side
-    // rename is surfaced, not swallowed).
+    // rename is surfaced, not swallowed). Not used in demo mode - see
+    // promptToRenameDemoSheet above.
     async function promptToRenameSheet(sheet, nameText, status) {
       const newName = prompt("Rename this sheet:", sheet.name);
       if (newName === null) return;
@@ -1724,7 +1817,9 @@
         renameIconButton.textContent = "✏️";
         renameIconButton.setAttribute("aria-label", "Rename this sheet");
         renameIconButton.title = "Rename";
-        renameIconButton.addEventListener("click", () => promptToRenameSheet(sheet, nameText, status));
+        renameIconButton.addEventListener("click", () =>
+          demoMode ? promptToRenameDemoSheet(sheet, nameText) : promptToRenameSheet(sheet, nameText, status)
+        );
         nameLine.appendChild(renameIconButton);
 
         if (isActive) {
@@ -1769,6 +1864,18 @@
 
       container.appendChild(list);
 
+      // Demo mode: no "Create a new sheet" - see index.html's copy of this
+      // for the full explanation.
+      if (demoMode) {
+        const demoNote = document.createElement("p");
+        demoNote.className = "sheets-demo-note";
+        demoNote.textContent =
+          "You're exploring a demo with sample data. Creating and managing your own sheets is part of the full product.";
+        container.appendChild(demoNote);
+        container.appendChild(status);
+        return container;
+      }
+
       const createButton = document.createElement("button");
       createButton.type = "button";
       createButton.className = "btn-secondary";
@@ -1808,7 +1915,7 @@
       return container;
     }
 
-    function renderProfilePanel(profile, sheets) {
+    function renderProfilePanel(profile, sheets, activeSheetId) {
       profilePanelContent.innerHTML = "";
 
       const header = document.createElement("div");
@@ -1845,7 +1952,7 @@
         openSheetLink.target = "_blank";
         openSheetLink.rel = "noopener";
         openSheetLink.className = "sheet-link-button";
-        openSheetLink.textContent = "Open my sheet";
+        openSheetLink.textContent = "Open active sheet";
         profilePanelContent.appendChild(openSheetLink);
       }
 
@@ -1901,9 +2008,10 @@
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
-      // "My sheets" - see index.html's copy of this for the full explanation.
-      if (!demoMode && sheets && sheets.length > 0) {
-        profilePanelContent.appendChild(makeSection("My sheets", renderSheetsSection(sheets, profile.sheetId)));
+      // "My sheets" - shown in demo mode too now - see index.html's copy of
+      // this for the full explanation.
+      if (sheets && sheets.length > 0) {
+        profilePanelContent.appendChild(makeSection("My sheets", renderSheetsSection(sheets, activeSheetId)));
       }
 
       const statsGrid = document.createElement("div");
@@ -1990,20 +2098,22 @@
         const profile = await response.json();
         if (!response.ok) throw new Error(profile.error || "Could not load profile.");
 
-        // Demo mode has no real per-user sheets to manage - see
-        // index.html's copy of this for the full explanation.
+        // GET /api/sheets works in demo mode too now - see index.html's
+        // copy of this for the full explanation.
         let sheets = [];
-        if (!demoMode) {
-          try {
-            const sheetsResponse = await fetch("/api/sheets");
-            const sheetsData = await sheetsResponse.json();
-            if (sheetsResponse.ok) sheets = sheetsData.sheets;
-          } catch (error) {
-            // Non-critical - see index.html's copy of this for why.
+        let activeSheetId = profile.sheetId;
+        try {
+          const sheetsResponse = await fetch("/api/sheets");
+          const sheetsData = await sheetsResponse.json();
+          if (sheetsResponse.ok) {
+            sheets = sheetsData.sheets;
+            activeSheetId = sheetsData.activeSheetId;
           }
+        } catch (error) {
+          // Non-critical - see index.html's copy of this for why.
         }
 
-        renderProfilePanel(profile, sheets);
+        renderProfilePanel(profile, sheets, activeSheetId);
       } catch (error) {
         profilePanelContent.textContent = "Couldn't load profile: " + error.message;
       }
