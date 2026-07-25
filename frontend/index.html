@@ -3838,7 +3838,16 @@
         body: "Keep separate lead lists - by quarter, campaign, or team - and switch between them anytime from your profile.",
       },
       {
-        selector: () => document.querySelector("#leadsContainer tbody tr:first-child .call-button"),
+        // NOTE: the leads table renders INSIDE #leadsTableScroll, not
+        // #leadsContainer - the JS variable named leadsContainer is itself
+        // bound to #leadsTableScroll (see its declaration further down),
+        // and renderLeadsTable()/renderEmptyLeadsState()/etc. all replace
+        // that element's ENTIRE innerHTML, which destroys the original
+        // <div id="leadsContainer"> placeholder the very first time any of
+        // them runs. So "#leadsContainer" stops existing in the DOM before
+        // the tour ever gets a chance to use it - #leadsTableScroll is the
+        // one that actually, permanently wraps the rendered table.
+        selector: () => document.querySelector("#leadsTableScroll tbody tr:first-child .call-button"),
         title: "Making a call",
         body: "Click to call, right from the browser. Rhythm transcribes both sides and coaches you live when a lead objects or shows interest.",
         // In demo mode this step is genuinely interactive - see
@@ -3918,6 +3927,60 @@
       return null;
     }
 
+    // Shows the cause before the effect: spotlights the first lead ROW
+    // itself (not the panel) with a "Click any lead to open their details"
+    // prompt, so the panel opening on the next step doesn't look like it
+    // just appeared from nowhere. Resolves once the panel should open -
+    // either because the rep clicked the row themselves (the row's own
+    // click handler, wired in createLeadRow(), already opens it - we just
+    // detect that it happened), or after a few seconds, or if they click
+    // Continue - whichever comes first. Returns true if the rep clicked
+    // the row themselves (so the caller doesn't ALSO need to open it),
+    // false if we should open it ourselves, or null if there's no row to
+    // point at at all.
+    async function promptToOpenLeadPanel() {
+      const row = document.querySelector("#leadsTableScroll tbody tr:first-child");
+      if (!row) return null;
+
+      row.scrollIntoView({ block: "center" });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const rect = positionSpotlight(row);
+      positionPopup(rect);
+      // Same trick the interactive call step uses - let the real row
+      // underneath actually receive the click instead of the highlight
+      // box swallowing it.
+      tourHighlightBox.classList.add("tour-highlight-box--clickable");
+
+      tourStepCounter.textContent = "";
+      tourStepTitle.textContent = "Lead details";
+      tourStepBody.textContent = "Click any lead to open their details.";
+      tourBackButton.style.visibility = "hidden"; // mid-transition - nothing meaningful to go back to yet
+      tourNextButton.textContent = "Continue";
+
+      const clickedThemselves = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          row.removeEventListener("click", onRowClick);
+          tourNextButton.removeEventListener("click", onContinueClick);
+          clearTimeout(fallbackTimer);
+          resolve(result);
+        };
+        const onRowClick = () => finish(true);
+        // Continue always works immediately, same philosophy as the call
+        // step - this just means WE open the panel instead of the rep.
+        const onContinueClick = () => finish(false);
+        row.addEventListener("click", onRowClick);
+        tourNextButton.addEventListener("click", onContinueClick);
+        const fallbackTimer = setTimeout(() => finish(false), 3000);
+      });
+
+      tourHighlightBox.classList.remove("tour-highlight-box--clickable");
+      return clickedThemselves;
+    }
+
     // Opens or closes the lead detail panel AND the profile panel to match
     // what THIS step needs (only ever one of the two, or neither, at once),
     // so Back and Next both work regardless of which direction you're
@@ -3933,11 +3996,23 @@
         if (!leadPanelIsOpen) {
           const firstLead = leadsLastFilteredList[0];
           if (!firstLead) return false;
-          await openLeadPanel(firstLead.Phone);
+
+          // Only shown ONCE, the moment the panel is about to open for the
+          // first time - not repeated for a later requiresPanel step while
+          // it's already open (e.g. moving from "After the call" straight
+          // into "Relationship memory").
+          const clickedThemselves = await promptToOpenLeadPanel();
+          if (clickedThemselves === null) return false; // no row to point at
+          if (!tourActive) return false; // Skip/Esc fired while we were waiting
+
+          if (!clickedThemselves) {
+            await openLeadPanel(firstLead.Phone);
+          }
           // Let the panel's slide-in transition (--transition) and its
           // freshly-fetched content finish rendering before anything below
           // measures its position.
           await new Promise((resolve) => setTimeout(resolve, 220));
+          if (!tourActive) return false;
         }
       } else if (leadPanelIsOpen) {
         closeLeadPanel();
@@ -4157,6 +4232,11 @@
 
       const step = TOUR_STEPS[index];
       const panelReady = await ensurePanelStateForStep(step);
+      // ensurePanelStateForStep() can wait several seconds (the row-click
+      // prompt, or opening a panel) - if Skip/Esc ended the tour while we
+      // were waiting, stop here instead of rendering a step into an
+      // overlay that's already been hidden.
+      if (!tourActive) return;
       const targetEl = panelReady ? step.selector() : null;
 
       if (!targetEl) {
