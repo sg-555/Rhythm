@@ -1853,6 +1853,14 @@
       transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
     }
 
+    /* The tour's one interactive step ("Making a call" in demo mode) needs
+       the spotlighted Call button to actually be clickable, unlike every
+       other (passive) step - see renderTourStep()'s
+       tourHighlightBox.classList.toggle(...). */
+    .tour-highlight-box--clickable {
+      pointer-events: none;
+    }
+
     .tour-popup {
       position: fixed;
       pointer-events: auto;
@@ -1918,6 +1926,31 @@
       display: flex;
       justify-content: space-between;
       gap: var(--sp-3);
+    }
+
+    /* Wraps the "Haven't clicked yet? Show me" fallback on the interactive
+       call step - collapses to nothing via :empty the rest of the time. */
+    .tour-callstep-fallback {
+      margin: 0 0 var(--sp-3) 0;
+      padding: var(--sp-2) var(--sp-3);
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-2);
+    }
+
+    .tour-callstep-fallback:empty {
+      display: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tour-callstep-fallback-hint {
+      margin: 0;
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
     }
 
     /* Shared by the tour's own "Next"/"Done" and the demo prompt's "Start" -
@@ -2068,6 +2101,11 @@
       </div>
       <h3 id="tourStepTitle"></h3>
       <p id="tourStepBody"></p>
+      <!-- Only ever filled in during the interactive "Making a call" step,
+           as a fallback if the rep hasn't clicked Call themselves after a
+           few seconds - see showCallStepFallbackButton(). Empty (and
+           collapsed via CSS :empty) the rest of the time. -->
+      <div id="tourCallStepFallback" class="tour-callstep-fallback"></div>
       <div class="tour-popup-actions">
         <button id="tourBackButton" type="button" class="btn-secondary">Back</button>
         <button id="tourNextButton" type="button" class="tour-next-button">Next</button>
@@ -3784,9 +3822,32 @@
         body: "Every lead is scored Hot, Warm, or Cold from how the call actually went, so you know who's worth calling first.",
       },
       {
+        selector: () => document.querySelector(".filter-row"),
+        title: "Filters & search",
+        body: "Filter by status or temperature, or search by name or phone, to instantly narrow the list to whoever matters right now.",
+      },
+      {
+        // Opens the PROFILE panel (not the lead detail panel) - see
+        // requiresProfilePanel in ensurePanelStateForStep() below. A real
+        // signed-in user always has at least one sheet by the time they'd
+        // see this (onboarding creates it), so "My sheets" is always there
+        // to point at - same for demo mode's three seeded sheets.
+        requiresProfilePanel: true,
+        selector: () => findProfilePanelSectionByTitle("My sheets"),
+        title: "Multiple sheets",
+        body: "Keep separate lead lists - by quarter, campaign, or team - and switch between them anytime from your profile.",
+      },
+      {
         selector: () => document.querySelector("#leadsContainer tbody tr:first-child .call-button"),
         title: "Making a call",
         body: "Click to call, right from the browser. Rhythm transcribes both sides and coaches you live when a lead objects or shows interest.",
+        // In demo mode this step is genuinely interactive - see
+        // beginInteractiveCallStep() below, which only runs when demoMode
+        // is true. Real signed-in users get the plain, passive version
+        // above instead - auto-triggering a real phone call would be a
+        // real cost/side effect, not something a tour should ever do.
+        interactive: true,
+        demoBody: "Click Call on this lead to see it in action - Rhythm transcribes both sides and coaches you live.",
       },
       {
         requiresPanel: true,
@@ -3801,6 +3862,12 @@
         body: "Rhythm remembers every conversation, so before call seven you know exactly where you left off on call six.",
       },
       {
+        requiresPanel: true,
+        selector: () => findPanelSectionByTitle("Send Follow-up SMS"),
+        title: "Automated follow-up",
+        body: "Send a follow-up text straight from here, no app-switching. (WhatsApp and email are coming soon.)",
+      },
+      {
         selector: () => document.getElementById("callbacksIndicator"),
         title: "Call-backs",
         body: "Rhythm schedules your follow-ups and reminds you when they're due, so leads don't go cold.",
@@ -3808,7 +3875,7 @@
       {
         selector: () => document.querySelector('.tab-link[href="analytics.html"]'),
         title: "Analytics",
-        body: "See your pick-up rate by hour and know the best time to call.",
+        body: "Filter by date and time, see your pick-up rate by hour, and drill from Connected/Not Connected straight into the matching leads.",
       },
     ];
 
@@ -3840,16 +3907,30 @@
       return null;
     }
 
-    // Opens or closes the lead detail panel to match what THIS step needs,
-    // so Back and Next both work regardless of which direction you're
-    // going. Returns false if a step needs the panel but there's no lead to
-    // open it for (e.g. a brand-new account with an empty sheet) - the
-    // caller skips that step when this happens.
-    async function ensurePanelStateForStep(step) {
-      const panelIsOpen = leadPanel.classList.contains("open");
+    // Same idea as findPanelSectionByTitle above, but for the PROFILE
+    // panel's sections (e.g. "My sheets") - a separate panel/container, see
+    // renderProfilePanel()'s own makeSection() calls into #profilePanelContent.
+    function findProfilePanelSectionByTitle(titleText) {
+      const titles = document.querySelectorAll("#profilePanelContent .panel-section-title");
+      for (const titleEl of titles) {
+        if (titleEl.textContent.trim() === titleText) return titleEl.closest(".panel-section");
+      }
+      return null;
+    }
 
+    // Opens or closes the lead detail panel AND the profile panel to match
+    // what THIS step needs (only ever one of the two, or neither, at once),
+    // so Back and Next both work regardless of which direction you're
+    // going. Returns false if a step needs the lead panel but there's no
+    // lead to open it for (e.g. a brand-new account with an empty sheet) -
+    // the caller skips that step when this happens. The profile panel
+    // always has something to show (My sheets exists the moment a real
+    // user finishes onboarding, or in demo mode's three seeded sheets), so
+    // there's no equivalent failure case for it.
+    async function ensurePanelStateForStep(step) {
+      const leadPanelIsOpen = leadPanel.classList.contains("open");
       if (step.requiresPanel) {
-        if (!panelIsOpen) {
+        if (!leadPanelIsOpen) {
           const firstLead = leadsLastFilteredList[0];
           if (!firstLead) return false;
           await openLeadPanel(firstLead.Phone);
@@ -3858,11 +3939,148 @@
           // measures its position.
           await new Promise((resolve) => setTimeout(resolve, 220));
         }
-      } else if (panelIsOpen) {
+      } else if (leadPanelIsOpen) {
         closeLeadPanel();
       }
 
+      const profilePanelIsOpen = profilePanel.classList.contains("open");
+      if (step.requiresProfilePanel) {
+        if (!profilePanelIsOpen) {
+          await openProfilePanel();
+          await new Promise((resolve) => setTimeout(resolve, 220));
+        }
+      } else if (profilePanelIsOpen) {
+        closeProfilePanel();
+      }
+
       return true;
+    }
+
+    // ── The interactive "Making a call" step (demo mode only) ────────────
+    // Non-null only while this step's own timers/listeners are active - see
+    // clearCallStepState(), which every other step transition calls first.
+    let callStepState = null;
+
+    // Cancels whatever the interactive call step currently has pending
+    // (fallback timer, auto-advance timer, the callEnded listener, the
+    // click listener on the real Call button) and clears the "Show me"
+    // button if it's showing. Safe to call even when there's nothing to
+    // clean up - every step transition calls this unconditionally first.
+    function clearCallStepState() {
+      if (!callStepState) return;
+      const state = callStepState;
+      callStepState = null; // clear the reference first, so any in-flight
+      // async check (below) sees the step has already ended
+
+      if (state.showMeTimer) clearTimeout(state.showMeTimer);
+      if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
+      if (state.onCallEnded) document.removeEventListener("rhythm:callEnded", state.onCallEnded);
+      if (state.onCallButtonClick) state.callButtonEl.removeEventListener("click", state.onCallButtonClick);
+      document.getElementById("tourCallStepFallback").innerHTML = "";
+    }
+
+    // Polls getBoundingClientRect() until an element genuinely has visible
+    // size, or gives up after timeoutMs. Used so the interactive call
+    // step's 15s auto-advance clock only starts once the transcript panel
+    // has actually appeared - isInCall flips true a tick or two before its
+    // CSS transition (--transition, ~160ms) finishes opening the column.
+    function waitForElementVisible(el, timeoutMs) {
+      return new Promise((resolve) => {
+        const start = Date.now();
+        (function check() {
+          const rect = el.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            resolve(true);
+          } else if (Date.now() - start > timeoutMs) {
+            resolve(false); // gave up - proceed anyway rather than hang forever
+          } else {
+            requestAnimationFrame(check);
+          }
+        })();
+      });
+    }
+
+    // Drives the interactive step: prompts a click on the real Call button
+    // (see the highlight box being made click-through for this one step),
+    // waits for the demo call to actually start, then auto-advances when it
+    // finishes OR after ~15s, whichever comes first - "Continue" (the
+    // relabelled Next button) can always advance immediately too. If
+    // nothing happens for a few seconds, a "Show me" fallback appears so
+    // this step can never get permanently stuck waiting for a click.
+    function beginInteractiveCallStep(callButtonEl) {
+      const firstLead = leadsLastFilteredList[0];
+      const phone = firstLead && firstLead.Phone;
+      if (!phone) return; // nothing to call - shouldn't happen since this
+      // step's own selector() already requires a first row to exist
+
+      const state = { callButtonEl };
+      callStepState = state;
+
+      // Runs once the demo call has genuinely started, whichever path got
+      // it there (the rep's own click, or the "Show me" fallback below).
+      const handleCallStarted = async () => {
+        if (callStepState !== state) return; // step already ended
+        if (state.callStarted) return; // e.g. clicked Call AND "Show me" near-simultaneously
+        state.callStarted = true;
+
+        if (state.showMeTimer) {
+          clearTimeout(state.showMeTimer);
+          state.showMeTimer = null;
+        }
+        document.getElementById("tourCallStepFallback").innerHTML = "";
+
+        await waitForElementVisible(transcriptPanel, 2000);
+        if (callStepState !== state) return; // could've ended while waiting
+
+        // Whichever happens first: the call naturally finishing, or ~15s.
+        state.onCallEnded = () => {
+          if (callStepState === state) goToTourStep(tourStepIndex + 1, 1);
+        };
+        document.addEventListener("rhythm:callEnded", state.onCallEnded);
+
+        state.autoAdvanceTimer = setTimeout(() => {
+          if (callStepState === state) goToTourStep(tourStepIndex + 1, 1);
+        }, 15000);
+      };
+      state.handleCallStarted = handleCallStarted;
+
+      // The real path: the rep clicks the (now click-through-highlighted)
+      // Call button themselves - its own handler (attached back when the
+      // row was built) runs first and starts the demo call synchronously,
+      // so isInCall is already true by the time this fires.
+      state.onCallButtonClick = () => handleCallStarted();
+      callButtonEl.addEventListener("click", state.onCallButtonClick);
+
+      // Fallback: if the rep hasn't clicked within a few seconds, offer to
+      // start the demo call on their behalf instead.
+      state.showMeTimer = setTimeout(() => {
+        if (callStepState !== state || isInCall) return;
+        showCallStepFallbackButton(phone, handleCallStarted);
+      }, 5000);
+    }
+
+    // Shows a small "Show me" button in the popup (below the body text)
+    // that starts the demo call directly - the fallback for a rep who
+    // hasn't clicked Call themselves after a few seconds.
+    function showCallStepFallbackButton(phone, handleCallStarted) {
+      const wrapper = document.getElementById("tourCallStepFallback");
+      wrapper.innerHTML = "";
+
+      const hint = document.createElement("p");
+      hint.className = "tour-callstep-fallback-hint";
+      hint.textContent = "Haven't clicked yet?";
+      wrapper.appendChild(hint);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "btn-secondary";
+      button.textContent = "Show me";
+      button.addEventListener("click", () => {
+        wrapper.innerHTML = "";
+        startDemoCall(phone);
+        handleCallStarted();
+      });
+      wrapper.appendChild(button);
     }
 
     // Positions the four dim strips (leaving a see-through hole around the
@@ -3921,7 +4139,16 @@
     // target can't be found (or a panel-dependent step has no lead to show
     // it for), moves on in whichever direction we were already going,
     // instead of spotlighting nothing.
+    //
+    // Leaving the interactive "Making a call" step (in EITHER direction -
+    // Back, Next/Continue, or auto-advance) always cleans up its timers/
+    // listeners first, and cleanly ends the demo call if it's still
+    // running, so whichever step we land on next starts from a clean
+    // slate - see clearCallStepState() below.
     async function renderTourStep(index, direction) {
+      clearCallStepState();
+      if (isInCall) endActiveCall("Call ended (demo)");
+
       if (index < 0) return; // can't go back past the first step
       if (index >= TOUR_STEPS.length) {
         endTour(); // ran off the end - the tour is finished
@@ -3946,18 +4173,53 @@
       const rect = positionSpotlight(targetEl);
       positionPopup(rect);
 
+      // Only the interactive call step (and only in demo mode - see the
+      // step's own comment) lets the spotlighted element itself be clicked;
+      // every other step keeps the highlight box swallowing clicks like the
+      // dim strips do.
+      const isInteractiveNow = !!step.interactive && demoMode;
+      tourHighlightBox.classList.toggle("tour-highlight-box--clickable", isInteractiveNow);
+
       tourStepCounter.textContent = `Step ${index + 1} of ${TOUR_STEPS.length}`;
       tourStepTitle.textContent = step.title;
-      tourStepBody.textContent = step.body;
+      tourStepBody.textContent = isInteractiveNow ? step.demoBody || step.body : step.body;
       tourBackButton.style.visibility = index === 0 ? "hidden" : "visible";
-      tourNextButton.textContent = index === TOUR_STEPS.length - 1 ? "Done" : "Next";
+      tourNextButton.textContent = isInteractiveNow
+        ? "Continue"
+        : index === TOUR_STEPS.length - 1
+        ? "Done"
+        : "Next";
+
+      if (isInteractiveNow) beginInteractiveCallStep(targetEl);
+    }
+
+    // True while a top-level step transition is in flight - some steps
+    // (opening the profile or lead panel) take a couple hundred ms, and
+    // tourStepIndex only updates partway through renderTourStep(), so a
+    // second click landing mid-transition would read a stale tourStepIndex
+    // and race the first one. Every entry point that starts a NEW
+    // transition (Back/Next/Continue, the interactive step's auto-advance,
+    // and the initial startTour()) goes through goToTourStep() below, which
+    // ignores extra calls until the current one finishes. renderTourStep's
+    // own recursive skip-cascade calls itself directly, since that's a
+    // continuation of the SAME transition, not a new one.
+    let tourTransitioning = false;
+
+    async function goToTourStep(index, direction) {
+      if (tourTransitioning) return;
+      tourTransitioning = true;
+      try {
+        await renderTourStep(index, direction);
+      } finally {
+        tourTransitioning = false;
+      }
     }
 
     async function startTour() {
       tourActive = true;
       tourOverlay.style.display = "block";
       document.addEventListener("keydown", handleTourKeydown);
-      await renderTourStep(0, 1);
+      await goToTourStep(0, 1);
     }
 
     // Ends the tour (finished OR skipped - both count as "seen it"). Signed-
@@ -3968,7 +4230,13 @@
       tourOverlay.style.display = "none";
       document.removeEventListener("keydown", handleTourKeydown);
 
+      // Skip/Esc can fire directly (not through renderTourStep), so the
+      // interactive call step's own cleanup needs repeating here too.
+      clearCallStepState();
+      if (isInCall) endActiveCall("Call ended (demo)");
+
       if (leadPanel.classList.contains("open")) closeLeadPanel();
+      if (profilePanel.classList.contains("open")) closeProfilePanel();
 
       if (!demoMode) {
         fetch("/api/tour/complete", { method: "POST" }).catch(() => {
@@ -3982,8 +4250,8 @@
     }
 
     tourSkipButton.addEventListener("click", () => endTour());
-    tourBackButton.addEventListener("click", () => renderTourStep(tourStepIndex - 1, -1));
-    tourNextButton.addEventListener("click", () => renderTourStep(tourStepIndex + 1, 1));
+    tourBackButton.addEventListener("click", () => goToTourStep(tourStepIndex - 1, -1));
+    tourNextButton.addEventListener("click", () => goToTourStep(tourStepIndex + 1, 1));
 
     // Re-measures the spotlight/popup if the window is resized mid-tour
     // (e.g. rotating a tablet) - without this they'd stay pinned to
