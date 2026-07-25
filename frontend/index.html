@@ -3835,28 +3835,7 @@
         requiresProfilePanel: true,
         selector: () => findProfilePanelSectionByTitle("My sheets"),
         title: "Multiple sheets",
-        body: "Keep separate lead lists - by quarter, campaign, or team - and switch between them anytime from your profile.",
-      },
-      {
-        // NOTE: the leads table renders INSIDE #leadsTableScroll, not
-        // #leadsContainer - the JS variable named leadsContainer is itself
-        // bound to #leadsTableScroll (see its declaration further down),
-        // and renderLeadsTable()/renderEmptyLeadsState()/etc. all replace
-        // that element's ENTIRE innerHTML, which destroys the original
-        // <div id="leadsContainer"> placeholder the very first time any of
-        // them runs. So "#leadsContainer" stops existing in the DOM before
-        // the tour ever gets a chance to use it - #leadsTableScroll is the
-        // one that actually, permanently wraps the rendered table.
-        selector: () => document.querySelector("#leadsTableScroll tbody tr:first-child .call-button"),
-        title: "Making a call",
-        body: "Click to call, right from the browser. Rhythm transcribes both sides and coaches you live when a lead objects or shows interest.",
-        // In demo mode this step is genuinely interactive - see
-        // beginInteractiveCallStep() below, which only runs when demoMode
-        // is true. Real signed-in users get the plain, passive version
-        // above instead - auto-triggering a real phone call would be a
-        // real cost/side effect, not something a tour should ever do.
-        interactive: true,
-        demoBody: "Click Call on this lead to see it in action - Rhythm transcribes both sides and coaches you live.",
+        body: "Rhythm creates your sheet for you - you just add names and numbers, and it fills in everything else. Keep separate lists for different campaigns and switch between them anytime.",
       },
       {
         requiresPanel: true,
@@ -3885,6 +3864,35 @@
         selector: () => document.querySelector('.tab-link[href="analytics.html"]'),
         title: "Analytics",
         body: "Filter by date and time, see your pick-up rate by hour, and drill from Connected/Not Connected straight into the matching leads.",
+      },
+      {
+        // LAST step, deliberately - see beginInteractiveCallStep() and
+        // finishTourViaCallStep() below. Its own popup/spotlight would
+        // otherwise sit on top of the AI Coach/Live Transcript panels it's
+        // meant to be showing off, so instead of advancing to another step
+        // afterward, clicking Call clears the ENTIRE tour overlay and ends
+        // the tour right there, into a clean, unobstructed view of the
+        // simulated call actually running.
+        //
+        // NOTE: the leads table renders INSIDE #leadsTableScroll, not
+        // #leadsContainer - the JS variable named leadsContainer is itself
+        // bound to #leadsTableScroll (see its declaration further down),
+        // and renderLeadsTable()/renderEmptyLeadsState()/etc. all replace
+        // that element's ENTIRE innerHTML, which destroys the original
+        // <div id="leadsContainer"> placeholder the very first time any of
+        // them runs. So "#leadsContainer" stops existing in the DOM before
+        // the tour ever gets a chance to use it - #leadsTableScroll is the
+        // one that actually, permanently wraps the rendered table.
+        selector: () => document.querySelector("#leadsTableScroll tbody tr:first-child .call-button"),
+        title: "Making a call",
+        body: "Click to call, right from the browser. Rhythm transcribes both sides and coaches you live when a lead objects or shows interest.",
+        // In demo mode this step is genuinely interactive - see
+        // beginInteractiveCallStep() below, which only runs when demoMode
+        // is true. Real signed-in users get the plain, passive version
+        // above instead - auto-triggering a real phone call would be a
+        // real cost/side effect, not something a tour should ever do.
+        interactive: true,
+        demoBody: "Simulate a call by clicking this button.",
       },
     ];
 
@@ -4032,15 +4040,23 @@
     }
 
     // ── The interactive "Making a call" step (demo mode only) ────────────
-    // Non-null only while this step's own timers/listeners are active - see
-    // clearCallStepState(), which every other step transition calls first.
+    // This is the LAST step - see its comment in TOUR_STEPS. There's
+    // nothing to advance to afterward, so unlike every other step, this one
+    // doesn't wait for anything to finish - the MOMENT the call starts (real
+    // click or the "Show me" fallback), the tour ends right there, clearing
+    // its own overlay so the AI Coach/Live Transcript it just opened are
+    // fully visible - see finishTourViaCallStep() below.
+    //
+    // callStepState is non-null only while this step's own timer/listener
+    // are pending - see clearCallStepState(), which every step transition
+    // calls first (so leaving this step early, e.g. via Back, cancels them).
     let callStepState = null;
 
-    // Cancels whatever the interactive call step currently has pending
-    // (fallback timer, auto-advance timer, the callEnded listener, the
-    // click listener on the real Call button) and clears the "Show me"
-    // button if it's showing. Safe to call even when there's nothing to
-    // clean up - every step transition calls this unconditionally first.
+    // Cancels whatever the interactive call step currently has pending (the
+    // "Show me" fallback timer and the click listener on the real Call
+    // button) and clears the "Show me" button if it's showing. Safe to call
+    // even when there's nothing to clean up - every step transition calls
+    // this unconditionally first.
     function clearCallStepState() {
       if (!callStepState) return;
       const state = callStepState;
@@ -4048,40 +4064,18 @@
       // async check (below) sees the step has already ended
 
       if (state.showMeTimer) clearTimeout(state.showMeTimer);
-      if (state.autoAdvanceTimer) clearTimeout(state.autoAdvanceTimer);
-      if (state.onCallEnded) document.removeEventListener("rhythm:callEnded", state.onCallEnded);
       if (state.onCallButtonClick) state.callButtonEl.removeEventListener("click", state.onCallButtonClick);
       document.getElementById("tourCallStepFallback").innerHTML = "";
     }
 
-    // Polls getBoundingClientRect() until an element genuinely has visible
-    // size, or gives up after timeoutMs. Used so the interactive call
-    // step's 15s auto-advance clock only starts once the transcript panel
-    // has actually appeared - isInCall flips true a tick or two before its
-    // CSS transition (--transition, ~160ms) finishes opening the column.
-    function waitForElementVisible(el, timeoutMs) {
-      return new Promise((resolve) => {
-        const start = Date.now();
-        (function check() {
-          const rect = el.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            resolve(true);
-          } else if (Date.now() - start > timeoutMs) {
-            resolve(false); // gave up - proceed anyway rather than hang forever
-          } else {
-            requestAnimationFrame(check);
-          }
-        })();
-      });
-    }
-
     // Drives the interactive step: prompts a click on the real Call button
-    // (see the highlight box being made click-through for this one step),
-    // waits for the demo call to actually start, then auto-advances when it
-    // finishes OR after ~15s, whichever comes first - "Continue" (the
-    // relabelled Next button) can always advance immediately too. If
-    // nothing happens for a few seconds, a "Show me" fallback appears so
-    // this step can never get permanently stuck waiting for a click.
+    // (see the highlight box being made click-through for this one step).
+    // The moment the demo call actually starts - whichever path got it
+    // there, the rep's own click or the "Show me" fallback - the tour ends
+    // immediately (see finishTourViaCallStep()), so its overlay never sits
+    // on top of the call it just started. If nothing happens for a few
+    // seconds, a "Show me" fallback appears so this step can never get
+    // permanently stuck waiting for a click.
     function beginInteractiveCallStep(callButtonEl) {
       const firstLead = leadsLastFilteredList[0];
       const phone = firstLead && firstLead.Phone;
@@ -4092,37 +4086,18 @@
       callStepState = state;
 
       // Runs once the demo call has genuinely started, whichever path got
-      // it there (the rep's own click, or the "Show me" fallback below).
-      const handleCallStarted = async () => {
+      // it there. Ends the tour right here - see finishTourViaCallStep().
+      const handleCallStarted = () => {
         if (callStepState !== state) return; // step already ended
         if (state.callStarted) return; // e.g. clicked Call AND "Show me" near-simultaneously
         state.callStarted = true;
-
-        if (state.showMeTimer) {
-          clearTimeout(state.showMeTimer);
-          state.showMeTimer = null;
-        }
-        document.getElementById("tourCallStepFallback").innerHTML = "";
-
-        await waitForElementVisible(transcriptPanel, 2000);
-        if (callStepState !== state) return; // could've ended while waiting
-
-        // Whichever happens first: the call naturally finishing, or ~15s.
-        state.onCallEnded = () => {
-          if (callStepState === state) goToTourStep(tourStepIndex + 1, 1);
-        };
-        document.addEventListener("rhythm:callEnded", state.onCallEnded);
-
-        state.autoAdvanceTimer = setTimeout(() => {
-          if (callStepState === state) goToTourStep(tourStepIndex + 1, 1);
-        }, 15000);
+        finishTourViaCallStep();
       };
-      state.handleCallStarted = handleCallStarted;
 
       // The real path: the rep clicks the (now click-through-highlighted)
       // Call button themselves - its own handler (attached back when the
       // row was built) runs first and starts the demo call synchronously,
-      // so isInCall is already true by the time this fires.
+      // so this just needs to notice the click happened.
       state.onCallButtonClick = () => handleCallStarted();
       callButtonEl.addEventListener("click", state.onCallButtonClick);
 
@@ -4156,6 +4131,26 @@
         handleCallStarted();
       });
       wrapper.appendChild(button);
+    }
+
+    // Ends the tour the instant the final step's call actually starts -
+    // deliberately NOT the same as endTour() below, which also force-ends
+    // any active call. Here the call is the whole point: we only clear the
+    // tour's OWN overlay (spotlight + popup, all inside #tourOverlay) so
+    // the AI Coach/Live Transcript panels the call just opened are fully
+    // visible and unobstructed, and mark the tour completed, exactly as if
+    // the rep had finished it normally.
+    function finishTourViaCallStep() {
+      tourActive = false;
+      tourOverlay.style.display = "none";
+      document.removeEventListener("keydown", handleTourKeydown);
+      clearCallStepState();
+
+      if (!demoMode) {
+        fetch("/api/tour/complete", { method: "POST" }).catch(() => {
+          // Non-critical - worst case the tour just auto-runs again next login.
+        });
+      }
     }
 
     // Positions the four dim strips (leaving a see-through hole around the
@@ -4264,11 +4259,17 @@
       tourStepTitle.textContent = step.title;
       tourStepBody.textContent = isInteractiveNow ? step.demoBody || step.body : step.body;
       tourBackButton.style.visibility = index === 0 ? "hidden" : "visible";
-      tourNextButton.textContent = isInteractiveNow
-        ? "Continue"
-        : index === TOUR_STEPS.length - 1
-        ? "Done"
-        : "Next";
+
+      // This is the tour's LAST step (see TOUR_STEPS) - when it's actually
+      // interactive (demo mode), there's no "Continue"/"Done" at all -
+      // clicking the Call button is the only way forward, and doing so ends
+      // the tour itself (see finishTourViaCallStep()). Real signed-in users
+      // get the normal "Done" button instead, since they only see the
+      // passive version of this step.
+      tourNextButton.style.display = isInteractiveNow ? "none" : "";
+      if (!isInteractiveNow) {
+        tourNextButton.textContent = index === TOUR_STEPS.length - 1 ? "Done" : "Next";
+      }
 
       if (isInteractiveNow) beginInteractiveCallStep(targetEl);
     }

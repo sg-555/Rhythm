@@ -252,8 +252,6 @@ function updateWorkspaceLayout() {
     // final message on the lead's buttons, then resets everything - the
     // shared state AND every button on the page - back to normal.
     function endActiveCall(message) {
-      const endedPhone = activeCallPhone; // capture before it's cleared below
-
       callButtonInstances
         .filter((instance) => instance.phone === activeCallPhone)
         .forEach((instance) => {
@@ -266,12 +264,6 @@ function updateWorkspaceLayout() {
       updateWorkspaceLayout(); // back to full-width leads, no call panels reserved
       stopTranscriptFeed();
       refreshAllCallButtons();
-
-      // Lets anything else on the page react to a call genuinely finishing,
-      // without needing to poll isInCall - used by the guided tour's
-      // interactive "Making a call" step to auto-advance the instant the
-      // simulated call ends, real or demo alike.
-      document.dispatchEvent(new CustomEvent("rhythm:callEnded", { detail: { phone: endedPhone } }));
     }
 
     // ── DEMO MODE call simulation ────────────────────────────────────────
