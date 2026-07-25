@@ -115,6 +115,10 @@ function rowToUser(row) {
     sheetId: row.sheet_id || null,
     phoneColumnFormatted: row.phone_column_formatted || false,
     theme: row.theme || null,
+    // True once this user has seen the guided product tour (either finished
+    // or skipped it) - see updateUserTourCompleted() below and the "Replay
+    // tour" option in the profile menu.
+    tourCompleted: row.tour_completed || false,
     accessToken: row.access_token,
     refreshToken: row.refresh_token,
     // Postgres returns BIGINT columns as strings (so huge values never
@@ -136,9 +140,13 @@ async function saveUser(email, tokens, profile) {
       // theme, phone_column_formatted) are simply left alone on conflict -
       // that's what "never touched here, so re-signing in never loses it"
       // means for each of those fields.
+      // tour_completed defaults to FALSE for a brand-new row and is NOT in
+      // the ON CONFLICT SET list (same reasoning as company/sheet_id/theme/
+      // phone_column_formatted above) - so a returning user's "already saw
+      // the tour" status is never reset by simply signing in again.
       const result = await db.query(
-        `INSERT INTO users (email, name, picture, company, sheet_id, theme, phone_column_formatted, access_token, refresh_token, token_expiry)
-         VALUES ($1, $2, $3, '', NULL, NULL, FALSE, $4, $5, $6)
+        `INSERT INTO users (email, name, picture, company, sheet_id, theme, phone_column_formatted, tour_completed, access_token, refresh_token, token_expiry)
+         VALUES ($1, $2, $3, '', NULL, NULL, FALSE, FALSE, $4, $5, $6)
          ON CONFLICT (email) DO UPDATE SET
            name = EXCLUDED.name,
            picture = COALESCE(EXCLUDED.picture, users.picture),
@@ -180,6 +188,9 @@ async function saveUser(email, tokens, profile) {
     // profile panel's theme toggle. Never touched here, so re-signing in
     // never loses it.
     theme: existing.theme || null,
+    // Whether this user has already seen the guided product tour - never
+    // touched here, so re-signing in never makes it auto-run again.
+    tourCompleted: existing.tourCompleted || false,
     accessToken: tokens.access_token,
     // Google only sends a refresh_token the FIRST time you consent (or
     // whenever we force prompt=consent, like we do above) - if THIS sign-in
@@ -297,6 +308,30 @@ async function updateUserPhoneColumnFormatted(email) {
   if (!users[email]) return null;
 
   users[email].phoneColumnFormatted = true;
+  saveUsersFile(users);
+  return users[email];
+}
+
+// Marks the guided product tour as seen for one user - called once it
+// finishes OR is skipped (both count as "don't auto-run again"), so it only
+// ever auto-plays on a genuinely first login. The "Replay tour" option in
+// the profile menu bypasses this flag entirely - it just re-runs the tour
+// without touching this at all.
+async function updateUserTourCompleted(email) {
+  if (db.isDatabaseMode) {
+    try {
+      const result = await db.query("UPDATE users SET tour_completed = TRUE WHERE email = $1 RETURNING *", [email]);
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to update tourCompleted in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
+  if (!users[email]) return null;
+
+  users[email].tourCompleted = true;
   saveUsersFile(users);
   return users[email];
 }
@@ -582,6 +617,7 @@ module.exports = {
   updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
+  updateUserTourCompleted,
   updateUserTokens,
   getSheetsForUser,
   addSheetForUser,

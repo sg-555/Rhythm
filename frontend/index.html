@@ -677,6 +677,9 @@
 
     .profile-signout-row {
       margin-top: var(--sp-5);
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
     }
 
     .sign-out-button {
@@ -1815,6 +1818,158 @@
       border-radius: var(--radius-sm);
       font-size: 0.85rem;
     }
+
+    /* ── Guided product tour ──────────────────────────────────────────────
+       A "spotlight": four dim strips positioned around whichever element is
+       the current step's target (leaving a see-through hole exactly at its
+       bounding box) plus a highlight ring, both recomputed per step by the
+       JS engine below. The dim strips and the highlight box all intercept
+       clicks (pointer-events: auto) so the tour is effectively modal - only
+       its own Back/Next/Skip (and Esc) do anything while it's running. The
+       overlay wrapper itself does NOT intercept clicks, so there's no risk
+       of it accidentally blocking something the strips don't actually cover. */
+    .tour-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      pointer-events: none;
+    }
+
+    .tour-dim {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.65);
+      pointer-events: auto;
+    }
+
+    /* Transparent - the real element shows through unchanged - just a ring
+       around it, and (like the dim strips) it swallows clicks rather than
+       letting the rep interact with the real control mid-tour. */
+    .tour-highlight-box {
+      position: fixed;
+      border: 3px solid var(--interactive);
+      border-radius: var(--radius-sm);
+      box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.25);
+      pointer-events: auto;
+      transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
+    }
+
+    .tour-popup {
+      position: fixed;
+      pointer-events: auto;
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-panel);
+      padding: var(--sp-5);
+      width: 320px;
+      max-width: calc(100vw - 32px);
+    }
+
+    /* Small screens: stop trying to track the target and just anchor the
+       popup to the bottom of the screen instead - see positionPopup(). */
+    .tour-popup--mobile {
+      left: 16px;
+      right: 16px;
+      bottom: 16px;
+      top: auto;
+      width: auto;
+    }
+
+    .tour-popup-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--sp-3);
+    }
+
+    .tour-step-counter {
+      color: var(--ink-faint);
+      font-size: var(--text-meta);
+      font-weight: 600;
+    }
+
+    .tour-skip-button {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .tour-skip-button:hover {
+      color: var(--ink);
+    }
+
+    .tour-popup h3 {
+      margin: 0 0 var(--sp-2) 0;
+      font-family: var(--font-display);
+      font-size: var(--text-section);
+    }
+
+    .tour-popup p {
+      margin: 0 0 var(--sp-4) 0;
+      color: var(--ink-muted);
+      font-size: var(--text-body);
+      line-height: 1.5;
+    }
+
+    .tour-popup-actions {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--sp-3);
+    }
+
+    /* Shared by the tour's own "Next"/"Done" and the demo prompt's "Start" -
+       same blue-fill treatment as the sign-in screen's action buttons. */
+    .tour-next-button {
+      background: var(--interactive);
+      color: var(--on-interactive);
+      border: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: var(--sp-2) var(--sp-5);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .tour-next-button:hover {
+      background: var(--interactive-hover);
+    }
+
+    /* Demo mode's small "want a tour?" prompt - see maybeShowDemoTourPrompt(). */
+    .demo-tour-prompt {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 150;
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+      padding: var(--sp-4);
+      max-width: 280px;
+    }
+
+    .demo-tour-prompt-text {
+      margin: 0 0 var(--sp-3) 0;
+      font-size: var(--text-body);
+      color: var(--ink);
+    }
+
+    .demo-tour-prompt-actions {
+      display: flex;
+      gap: var(--sp-2);
+    }
+
+    @media (max-width: 640px) {
+      .demo-tour-prompt {
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        max-width: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1894,6 +2049,43 @@
   <div id="profilePanel" class="lead-panel">
     <button id="profilePanelCloseButton" class="panel-close-button" aria-label="Close">×</button>
     <div id="profilePanelContent" class="panel-content"></div>
+  </div>
+
+  <!-- Guided product tour: dims the whole page except one spotlighted
+       element per step, with a small popup (Back/Next/Skip) next to it -
+       see the "Guided product tour" script section below for the step
+       list and the engine that drives this. Hidden until startTour() runs. -->
+  <div id="tourOverlay" class="tour-overlay" style="display: none;">
+    <div id="tourDimTop" class="tour-dim"></div>
+    <div id="tourDimBottom" class="tour-dim"></div>
+    <div id="tourDimLeft" class="tour-dim"></div>
+    <div id="tourDimRight" class="tour-dim"></div>
+    <div id="tourHighlightBox" class="tour-highlight-box"></div>
+    <div id="tourPopup" class="tour-popup">
+      <div class="tour-popup-header">
+        <span id="tourStepCounter" class="tour-step-counter"></span>
+        <button id="tourSkipButton" type="button" class="tour-skip-button">Skip tour</button>
+      </div>
+      <h3 id="tourStepTitle"></h3>
+      <p id="tourStepBody"></p>
+      <div class="tour-popup-actions">
+        <button id="tourBackButton" type="button" class="btn-secondary">Back</button>
+        <button id="tourNextButton" type="button" class="tour-next-button">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demo mode only: a small, dismissable "want a tour?" prompt, shown once
+       per browser tab session instead of auto-running - see
+       maybeShowDemoTourPrompt() below (demo visitors have no account to
+       remember "already saw it" against, so asking is more robust than
+       guessing). -->
+  <div id="demoTourPrompt" class="demo-tour-prompt" style="display: none;">
+    <p class="demo-tour-prompt-text">New here? Take a quick tour of Rhythm.</p>
+    <div class="demo-tour-prompt-actions">
+      <button id="demoTourStartButton" type="button" class="tour-next-button">Start</button>
+      <button id="demoTourDismissButton" type="button" class="btn-secondary">No thanks</button>
+    </div>
   </div>
 
   <div class="page-shell">
@@ -2080,6 +2272,12 @@
     // the sheet. Stays null in demo mode and before onboarding.
     let currentUserSheetId = null;
 
+    // Whether this signed-in user has already seen the guided product tour
+    // (see GET /api/me and the "Guided product tour" section below, which
+    // reads this once at startup to decide whether to auto-run it). Stays
+    // false (unused) in demo mode - demo decides differently, via a prompt.
+    let currentUserTourCompleted = false;
+
     // The one place we build a link to a Google Sheet from its ID.
     function sheetUrlFor(sheetId) {
       return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
@@ -2128,6 +2326,7 @@
           signOutButton.textContent = "Sign out";
           currentUserEmail = data.user.email;
           currentUserSheetId = data.user.sheetId;
+          currentUserTourCompleted = !!data.user.tourCompleted;
 
           // Sync the server-persisted theme choice (e.g. set on another
           // device) into this browser, so it doesn't just fall back to
@@ -2602,6 +2801,20 @@
 
       const signOutRow = document.createElement("div");
       signOutRow.className = "profile-signout-row";
+
+      // Re-runs the guided tour on demand - works regardless of whether
+      // it's already been seen (unlike the auto-run, this never touches
+      // tourCompleted - see startTour()/maybeStartTour() above).
+      const replayTourButton = document.createElement("button");
+      replayTourButton.type = "button";
+      replayTourButton.className = "btn-secondary";
+      replayTourButton.textContent = "Replay tour";
+      replayTourButton.addEventListener("click", () => {
+        closeProfilePanel();
+        startTour();
+      });
+      signOutRow.appendChild(replayTourButton);
+
       const signOutInPanel = document.createElement("button");
       signOutInPanel.className = "btn-secondary";
       signOutInPanel.textContent = demoMode ? "Exit demo" : "Sign out";
@@ -3544,6 +3757,282 @@
       }
     });
 
+    // ── Guided product tour ──────────────────────────────────────────────
+    // A short, step-through walkthrough: one real element spotlighted per
+    // step, with a popup explaining the feature in a line and the pain it
+    // removes in another. Auto-runs once for a genuinely first-time signed-
+    // in user (see maybeStartTour below); demo visitors are asked instead,
+    // via a small dismissable prompt, since there's no account to remember
+    // "have they seen it" against.
+    //
+    // Each step's `selector` is a FUNCTION (not a plain string) so it's
+    // re-resolved fresh every time that step is shown - some targets don't
+    // exist until leads have loaded, or until the lead panel is open. If a
+    // step's target can't be found when its turn comes up, renderTourStep()
+    // silently skips it instead of spotlighting nothing. `requiresPanel`
+    // steps open the FIRST lead's detail panel just long enough to point
+    // into it - see ensurePanelStateForStep().
+    const TOUR_STEPS = [
+      {
+        selector: () => document.getElementById("leadsCard"),
+        title: "Your leads list",
+        body: "Your whole pipeline in one place. The only thing you fill in is a name and a number - Rhythm fills in the rest.",
+      },
+      {
+        selector: () => document.getElementById("temperatureFilter"),
+        title: "Temperature",
+        body: "Every lead is scored Hot, Warm, or Cold from how the call actually went, so you know who's worth calling first.",
+      },
+      {
+        selector: () => document.querySelector("#leadsContainer tbody tr:first-child .call-button"),
+        title: "Making a call",
+        body: "Click to call, right from the browser. Rhythm transcribes both sides and coaches you live when a lead objects or shows interest.",
+      },
+      {
+        requiresPanel: true,
+        selector: () => findPanelSectionByTitle("AI Notes"),
+        title: "After the call",
+        body: "The notes, the outcome, the next step - written for you the moment you hang up. Nothing to type.",
+      },
+      {
+        requiresPanel: true,
+        selector: () => findPanelSectionByTitle("Previous Calls"),
+        title: "Relationship memory",
+        body: "Rhythm remembers every conversation, so before call seven you know exactly where you left off on call six.",
+      },
+      {
+        selector: () => document.getElementById("callbacksIndicator"),
+        title: "Call-backs",
+        body: "Rhythm schedules your follow-ups and reminds you when they're due, so leads don't go cold.",
+      },
+      {
+        selector: () => document.querySelector('.tab-link[href="analytics.html"]'),
+        title: "Analytics",
+        body: "See your pick-up rate by hour and know the best time to call.",
+      },
+    ];
+
+    let tourActive = false;
+    let tourStepIndex = 0;
+
+    const tourOverlay = document.getElementById("tourOverlay");
+    const tourDimTop = document.getElementById("tourDimTop");
+    const tourDimBottom = document.getElementById("tourDimBottom");
+    const tourDimLeft = document.getElementById("tourDimLeft");
+    const tourDimRight = document.getElementById("tourDimRight");
+    const tourHighlightBox = document.getElementById("tourHighlightBox");
+    const tourPopup = document.getElementById("tourPopup");
+    const tourStepCounter = document.getElementById("tourStepCounter");
+    const tourStepTitle = document.getElementById("tourStepTitle");
+    const tourStepBody = document.getElementById("tourStepBody");
+    const tourBackButton = document.getElementById("tourBackButton");
+    const tourNextButton = document.getElementById("tourNextButton");
+    const tourSkipButton = document.getElementById("tourSkipButton");
+
+    // Finds a lead detail panel section by its visible heading - every
+    // section is built through makeSection() in shared-lead-panel.js, which
+    // always renders a ".panel-section-title" element with that exact text.
+    function findPanelSectionByTitle(titleText) {
+      const titles = document.querySelectorAll("#panelContent .panel-section-title");
+      for (const titleEl of titles) {
+        if (titleEl.textContent.trim() === titleText) return titleEl.closest(".panel-section");
+      }
+      return null;
+    }
+
+    // Opens or closes the lead detail panel to match what THIS step needs,
+    // so Back and Next both work regardless of which direction you're
+    // going. Returns false if a step needs the panel but there's no lead to
+    // open it for (e.g. a brand-new account with an empty sheet) - the
+    // caller skips that step when this happens.
+    async function ensurePanelStateForStep(step) {
+      const panelIsOpen = leadPanel.classList.contains("open");
+
+      if (step.requiresPanel) {
+        if (!panelIsOpen) {
+          const firstLead = leadsLastFilteredList[0];
+          if (!firstLead) return false;
+          await openLeadPanel(firstLead.Phone);
+          // Let the panel's slide-in transition (--transition) and its
+          // freshly-fetched content finish rendering before anything below
+          // measures its position.
+          await new Promise((resolve) => setTimeout(resolve, 220));
+        }
+      } else if (panelIsOpen) {
+        closeLeadPanel();
+      }
+
+      return true;
+    }
+
+    // Positions the four dim strips (leaving a see-through hole around the
+    // target) plus the highlight ring - recomputed every step since the
+    // spotlighted element can be anywhere on the page. Returns the target's
+    // own rect, so positionPopup() below doesn't need to measure it again.
+    function positionSpotlight(targetEl) {
+      const rect = targetEl.getBoundingClientRect();
+      const pad = 6;
+      const top = Math.max(rect.top - pad, 0);
+      const left = Math.max(rect.left - pad, 0);
+      const right = Math.min(rect.right + pad, window.innerWidth);
+      const bottom = Math.min(rect.bottom + pad, window.innerHeight);
+
+      tourDimTop.style.cssText = `top:0; left:0; width:100%; height:${top}px;`;
+      tourDimBottom.style.cssText = `top:${bottom}px; left:0; width:100%; height:${Math.max(window.innerHeight - bottom, 0)}px;`;
+      tourDimLeft.style.cssText = `top:${top}px; left:0; width:${left}px; height:${bottom - top}px;`;
+      tourDimRight.style.cssText = `top:${top}px; left:${right}px; width:${Math.max(window.innerWidth - right, 0)}px; height:${bottom - top}px;`;
+      tourHighlightBox.style.cssText = `top:${top}px; left:${left}px; width:${right - left}px; height:${bottom - top}px;`;
+
+      return { top, left, right, bottom };
+    }
+
+    // Places the popup below the target by default, above it if there's not
+    // enough room below, and clamped so it never runs off either side. On
+    // narrow screens it gives up tracking the target and becomes a fixed
+    // bottom sheet instead (see .tour-popup--mobile) - trying to pin a
+    // popup next to a small element leaves too little room to be readable there.
+    function positionPopup(rect) {
+      const isNarrow = window.innerWidth <= 640;
+      tourPopup.classList.toggle("tour-popup--mobile", isNarrow);
+      if (isNarrow) {
+        tourPopup.style.top = "";
+        tourPopup.style.left = "";
+        return;
+      }
+
+      const margin = 16;
+      const popupWidth = tourPopup.offsetWidth || 320;
+      const popupHeight = tourPopup.offsetHeight || 200;
+
+      let top = rect.bottom + margin;
+      if (top + popupHeight > window.innerHeight - margin) {
+        top = rect.top - popupHeight - margin;
+      }
+      top = Math.max(margin, Math.min(top, window.innerHeight - popupHeight - margin));
+
+      let left = Math.max(margin, Math.min(rect.left, window.innerWidth - popupWidth - margin));
+
+      tourPopup.style.top = `${top}px`;
+      tourPopup.style.left = `${left}px`;
+    }
+
+    // Renders one step: makes sure the panel is open/closed as needed,
+    // finds the target element, and positions everything around it. If the
+    // target can't be found (or a panel-dependent step has no lead to show
+    // it for), moves on in whichever direction we were already going,
+    // instead of spotlighting nothing.
+    async function renderTourStep(index, direction) {
+      if (index < 0) return; // can't go back past the first step
+      if (index >= TOUR_STEPS.length) {
+        endTour(); // ran off the end - the tour is finished
+        return;
+      }
+
+      const step = TOUR_STEPS[index];
+      const panelReady = await ensurePanelStateForStep(step);
+      const targetEl = panelReady ? step.selector() : null;
+
+      if (!targetEl) {
+        await renderTourStep(index + direction, direction);
+        return;
+      }
+
+      tourStepIndex = index;
+      targetEl.scrollIntoView({ block: "center" });
+      // One frame for the (instant, not smooth - see the reduced-motion
+      // rule above) scroll to settle before measuring its final position.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const rect = positionSpotlight(targetEl);
+      positionPopup(rect);
+
+      tourStepCounter.textContent = `Step ${index + 1} of ${TOUR_STEPS.length}`;
+      tourStepTitle.textContent = step.title;
+      tourStepBody.textContent = step.body;
+      tourBackButton.style.visibility = index === 0 ? "hidden" : "visible";
+      tourNextButton.textContent = index === TOUR_STEPS.length - 1 ? "Done" : "Next";
+    }
+
+    async function startTour() {
+      tourActive = true;
+      tourOverlay.style.display = "block";
+      document.addEventListener("keydown", handleTourKeydown);
+      await renderTourStep(0, 1);
+    }
+
+    // Ends the tour (finished OR skipped - both count as "seen it"). Signed-
+    // in users get their tourCompleted flag set so it never auto-runs again;
+    // demo mode has no such flag to set (see maybeStartTour below).
+    function endTour() {
+      tourActive = false;
+      tourOverlay.style.display = "none";
+      document.removeEventListener("keydown", handleTourKeydown);
+
+      if (leadPanel.classList.contains("open")) closeLeadPanel();
+
+      if (!demoMode) {
+        fetch("/api/tour/complete", { method: "POST" }).catch(() => {
+          // Non-critical - worst case the tour just auto-runs again next login.
+        });
+      }
+    }
+
+    function handleTourKeydown(event) {
+      if (event.key === "Escape") endTour();
+    }
+
+    tourSkipButton.addEventListener("click", () => endTour());
+    tourBackButton.addEventListener("click", () => renderTourStep(tourStepIndex - 1, -1));
+    tourNextButton.addEventListener("click", () => renderTourStep(tourStepIndex + 1, 1));
+
+    // Re-measures the spotlight/popup if the window is resized mid-tour
+    // (e.g. rotating a tablet) - without this they'd stay pinned to
+    // whatever coordinates were true before the resize.
+    window.addEventListener("resize", () => {
+      if (!tourActive) return;
+      const targetEl = TOUR_STEPS[tourStepIndex] && TOUR_STEPS[tourStepIndex].selector();
+      if (!targetEl) return;
+      const rect = positionSpotlight(targetEl);
+      positionPopup(rect);
+    });
+
+    // Demo mode: ask instead of auto-running - shown once per browser TAB
+    // SESSION (sessionStorage, not localStorage) so it doesn't nag again on
+    // every reload/navigation within the same visit, but does come back the
+    // next time someone opens a fresh demo session.
+    const DEMO_TOUR_PROMPT_KEY = "rhythmDemoTourPrompted";
+    const demoTourPrompt = document.getElementById("demoTourPrompt");
+    const demoTourStartButton = document.getElementById("demoTourStartButton");
+    const demoTourDismissButton = document.getElementById("demoTourDismissButton");
+
+    demoTourStartButton.addEventListener("click", () => {
+      demoTourPrompt.style.display = "none";
+      startTour();
+    });
+
+    demoTourDismissButton.addEventListener("click", () => {
+      demoTourPrompt.style.display = "none";
+    });
+
+    // Called once at startup (see the bootstrap IIFE below) to decide
+    // whether the tour should auto-run, be offered, or do nothing:
+    // - Demo mode: never auto-runs - shows the small prompt above instead
+    //   (once per tab session), since there's no account to check a
+    //   tourCompleted flag against.
+    // - Signed in: auto-runs exactly once, the very first time
+    //   tourCompleted is false - see GET /api/me and POST /api/tour/complete.
+    function maybeStartTour() {
+      if (demoMode) {
+        if (!sessionStorage.getItem(DEMO_TOUR_PROMPT_KEY)) {
+          sessionStorage.setItem(DEMO_TOUR_PROMPT_KEY, "1");
+          demoTourPrompt.style.display = "block";
+        }
+        return;
+      }
+
+      if (!currentUserTourCompleted) startTour();
+    }
+
     // Only load leads / set up calling once someone's actually signed in AND
     // has a sheet connected - otherwise the sign-in or onboarding overlay is
     // already showing (see checkSignedIn), and there's nothing to load yet.
@@ -3561,6 +4050,16 @@
       // server.js), so there's nothing for device.connect() to use anyway.
       if (!demoMode) setupCallingDevice();
       else deviceStatus.textContent = "Demo mode - calls are simulated.";
+
+      // "Replay tour" (profile menu) sets this before navigating here from
+      // Call-backs/Analytics, which have no tour engine of their own - it
+      // always wins over the normal auto-run/prompt logic below.
+      if (sessionStorage.getItem("rhythmReplayTourRequested")) {
+        sessionStorage.removeItem("rhythmReplayTourRequested");
+        startTour();
+      } else {
+        maybeStartTour();
+      }
 
       // Keeps the page up to date on its own - re-fetches leads (updating
       // the table, filter, Due badges, and the Call-backs indicator) and

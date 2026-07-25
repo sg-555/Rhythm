@@ -733,6 +733,9 @@
 
     .profile-signout-row {
       margin-top: var(--sp-5);
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
     }
 
     .sign-out-button {
@@ -1798,6 +1801,20 @@
 
       const signOutRow = document.createElement("div");
       signOutRow.className = "profile-signout-row";
+
+      // The guided tour engine only lives on the Leads page - this just
+      // navigates there and leaves a flag for it to pick up (see index.html's
+      // bootstrap IIFE), instead of duplicating the whole tour here too.
+      const replayTourButton = document.createElement("button");
+      replayTourButton.type = "button";
+      replayTourButton.className = "btn-secondary";
+      replayTourButton.textContent = "Replay tour";
+      replayTourButton.addEventListener("click", () => {
+        sessionStorage.setItem("rhythmReplayTourRequested", "1");
+        location.href = "index.html";
+      });
+      signOutRow.appendChild(replayTourButton);
+
       const signOutInPanel = document.createElement("button");
       signOutInPanel.className = "btn-secondary";
       signOutInPanel.textContent = demoMode ? "Exit demo" : "Sign out";

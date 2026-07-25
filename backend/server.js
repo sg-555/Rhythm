@@ -43,6 +43,7 @@ const {
   updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
+  updateUserTourCompleted,
   getSheetsForUser,
   addSheetForUser,
   renameSheetForUser,
@@ -147,10 +148,29 @@ app.get("/api/me", async (req, res) => {
           hasSheet: !!user.sheetId,
           sheetId: user.sheetId || null,
           theme: user.theme || null,
+          // Whether the guided product tour has already run for this user -
+          // see checkSignedIn() in the frontend, which auto-starts the tour
+          // only when this is false (a genuinely first login).
+          tourCompleted: !!user.tourCompleted,
         }
       : null,
     demo: isDemoRequest(req),
   });
+});
+
+// POST /api/tour/complete: marks the guided product tour as seen, so it
+// never auto-runs again for this user - called both when the tour finishes
+// AND when it's skipped (either way, the rep has now seen it once). The
+// "Replay tour" option in the profile menu does NOT call this - it just
+// re-starts the tour directly, without touching this flag.
+app.post("/api/tour/complete", async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
+  await updateUserTourCompleted(user.email);
+  res.json({ success: true });
 });
 
 // ── Demo Mode entry points ───────────────────────────────────────────────

@@ -72,12 +72,18 @@ async function createTablesIfNotExist() {
       sheet_id TEXT,
       theme TEXT,
       phone_column_formatted BOOLEAN NOT NULL DEFAULT FALSE,
+      tour_completed BOOLEAN NOT NULL DEFAULT FALSE,
       access_token TEXT,
       refresh_token TEXT,
       token_expiry BIGINT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // CREATE TABLE IF NOT EXISTS only helps on a brand-new database - it does
+  // nothing for a database that already has a users table from BEFORE this
+  // column existed. ADD COLUMN IF NOT EXISTS covers that case too, so this
+  // stays "safe to run every time the server starts" for existing deployments.
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tour_completed BOOLEAN NOT NULL DEFAULT FALSE`);
 
   // One row per completed call - what the Analytics dashboard is built
   // from. Scoped by user_email so each rep only ever sees their own calls
