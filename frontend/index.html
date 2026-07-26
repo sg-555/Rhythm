@@ -1440,6 +1440,10 @@
       min-width: 0; /* lets it wrap/shrink instead of forcing the row wider */
     }
 
+    .dialer-collapsed-hint {
+      color: var(--ink-muted);
+    }
+
     .dialer-gap-label {
       color: var(--ink-muted);
       margin-left: auto; /* pushes the gap-setting + Start button to the right */
@@ -2237,7 +2241,16 @@
          once "Start dialing" is clicked. See the "Power dialer" script
          section for the full state machine. -->
     <div id="dialerBar" class="dialer-bar">
-      <div id="dialerSelectionRow" class="dialer-row">
+      <!-- Collapsed entry point - shown until "Power Dialer" is clicked
+           (see revealDialerSelectionUI()), so the leads table isn't
+           cluttered with checkboxes/bulk actions unless you actually want
+           them. Once revealed, stays revealed for the rest of the page. -->
+      <div id="dialerCollapsedRow" class="dialer-row">
+        <button type="button" id="powerDialerRevealButton" class="btn-secondary">📞 Power Dialer</button>
+        <span class="dialer-collapsed-hint">Queue up leads and auto-dial through them, one call at a time.</span>
+      </div>
+
+      <div id="dialerSelectionRow" class="dialer-row" style="display: none;">
         <button type="button" id="selectAllButton" class="btn-secondary">Select all</button>
         <button type="button" id="selectAllFilteredButton" class="btn-secondary">Select all filtered</button>
         <button type="button" id="clearSelectionButton" class="btn-secondary">Clear selection</button>
@@ -3121,7 +3134,10 @@
       if (lead.Due) row.classList.add("due-row");
       row.dataset.phone = lead.Phone; // read back by shift-click range-select - see handleDialerCheckboxClick()
 
-      row.appendChild(createDialerCheckboxCell(lead));
+      // Only shown once "Power Dialer" has been revealed (see
+      // revealDialerSelectionUI()) - keeps the table uncluttered until the
+      // rep actually wants to queue up leads.
+      if (dialerSelectionRevealed) row.appendChild(createDialerCheckboxCell(lead));
       row.appendChild(createNameCell(lead));
       row.appendChild(createCell(lead.Phone));
       row.appendChild(createCell(lead.Status));
@@ -3189,7 +3205,7 @@
       table.innerHTML = `
         <thead>
           <tr>
-            <th></th>
+            ${dialerSelectionRevealed ? "<th></th>" : ""}
             <th>Name</th>
             <th>Phone</th>
             <th>Status</th>
@@ -3977,11 +3993,47 @@
     const selectedLeadPhones = new Set();
     let lastCheckedPhoneForShiftSelect = null; // shift-click range anchor
 
+    // True once "Power Dialer" has been clicked (see revealDialerSelectionUI
+    // below) - controls whether the leads table even HAS a checkbox column
+    // (see createLeadRow/renderLeadsTable) and whether the selection bar is
+    // showing. Stays true for the rest of the page once revealed - this
+    // isn't a collapse/expand toggle, just a one-time reveal.
+    let dialerSelectionRevealed = false;
+
+    const dialerCollapsedRow = document.getElementById("dialerCollapsedRow");
+    const powerDialerRevealButton = document.getElementById("powerDialerRevealButton");
     const dialerSelectionCount = document.getElementById("dialerSelectionCount");
     const dialerStartButton = document.getElementById("dialerStartButton");
     const selectAllButton = document.getElementById("selectAllButton");
     const selectAllFilteredButton = document.getElementById("selectAllFilteredButton");
     const clearSelectionButton = document.getElementById("clearSelectionButton");
+
+    function revealDialerSelectionUI() {
+      if (dialerSelectionRevealed) return;
+      dialerSelectionRevealed = true;
+      dialerCollapsedRow.style.display = "none";
+      dialerSelectionRow.style.display = "flex";
+      renderLeadsTable(leadsLastFilteredList); // re-render so the checkbox column actually appears
+    }
+
+    // Used by the guided tour to leave things clean once it moves past
+    // these steps (see ensurePanelStateForStep()/endTour()) - never called
+    // while a real selection or session is in progress, so it can't
+    // stomp on genuine work.
+    function collapseDialerSelectionUI() {
+      if (!dialerSelectionRevealed) return;
+      // Never collapse out from under a running session (dialerSessionRow
+      // would still be showing) - safe to call unconditionally from
+      // anywhere, same as clearCallStepState()/clearClickGateState().
+      if (dialerState !== "idle") return;
+      dialerSelectionRevealed = false;
+      selectedLeadPhones.clear();
+      dialerSelectionRow.style.display = "none";
+      dialerCollapsedRow.style.display = "flex";
+      renderLeadsTable(leadsLastFilteredList);
+    }
+
+    powerDialerRevealButton.addEventListener("click", revealDialerSelectionUI);
 
     // Re-renders the table so every checkbox reflects selectedLeadPhones -
     // simplest way to keep potentially MANY rows (shift-click range, select
@@ -4425,6 +4477,41 @@
         body: "Filter by date and time, see your pick-up rate by hour, and drill from Connected/Not Connected straight into the matching leads.",
       },
       {
+        // A click-gate, same PATTERN as the final call step below (spotlight
+        // a real button, no Next/Continue, a "Show me" fallback if it isn't
+        // clicked) but simpler - see beginClickGateStep(). Unlike the call
+        // step, clicking here just ADVANCES to the next step rather than
+        // ending the tour - and it's fully interactive for real signed-in
+        // users too, not just demo mode, since revealing the selection UI
+        // has no real-world cost or side effect (unlike placing a call).
+        //
+        // If the dialer's already revealed (the rep had a real selection
+        // going before the tour started), this button is hidden - return
+        // null so this step is skipped straight to "Build your queue"
+        // instead of spotlighting an invisible target.
+        selector: () => (dialerSelectionRevealed ? null : document.getElementById("powerDialerRevealButton")),
+        title: "Power Dialer",
+        body: "Power through your call list. Click Power Dialer to build a calling queue.",
+        clickGate: true,
+      },
+      {
+        // Opens the dialer's selection UI (see requiresDialerSelection in
+        // ensurePanelStateForStep()) so there's something real to point at -
+        // purely GUIDED, nothing forced. Targets the whole selection bar;
+        // the checkboxes themselves live in the table rows, which the copy
+        // explains but doesn't spotlight directly.
+        requiresDialerSelection: true,
+        selector: () => document.getElementById("dialerSelectionRow"),
+        title: "Build your queue",
+        body: 'Tick leads to queue them - or filter first and hit "Select all filtered". Shift-click to grab a whole range at once. No clicking one by one.',
+      },
+      {
+        requiresDialerSelection: true,
+        selector: () => document.getElementById("dialerStartButton"),
+        title: "Set the pace and go",
+        body: "Set the gap between calls, then hit Start. Rhythm dials the next lead automatically after each no-answer - and stops the moment someone picks up, so you can talk.",
+      },
+      {
         // LAST step, deliberately - see beginInteractiveCallStep() and
         // finishTourViaCallStep() below. Its own popup/spotlight would
         // otherwise sit on top of the AI Coach/Live Transcript panels it's
@@ -4595,6 +4682,19 @@
         closeProfilePanel();
       }
 
+      // "Build your queue"/"Set the pace" need the dialer's selection UI
+      // open to have anything to point at - reveals it if it isn't already
+      // (e.g. the rep skipped the Power Dialer click-gate step somehow, or
+      // is stepping Back into these). Collapses it again once we're on a
+      // step that doesn't need it (e.g. moving on to the final call step),
+      // UNLESS there's a real selection in progress - see
+      // collapseDialerSelectionUI()'s own guard against clobbering that.
+      if (step.requiresDialerSelection) {
+        if (dialerState === "idle") revealDialerSelectionUI();
+      } else if (selectedLeadPhones.size === 0) {
+        collapseDialerSelectionUI();
+      }
+
       return true;
     }
 
@@ -4668,16 +4768,18 @@
       }, 5000);
     }
 
-    // Shows a small "Show me" button in the popup (below the body text)
-    // that starts the demo call directly - the fallback for a rep who
-    // hasn't clicked Call themselves after a few seconds.
-    function showCallStepFallbackButton(phone, handleCallStarted) {
+    // Shows a small "Show me" button in the popup (below the body text) -
+    // the shared fallback UI for ANY click-gate step (the call step below,
+    // and the Power Dialer reveal gate - see beginClickGateStep()) that
+    // hasn't been clicked yet after a few seconds. onFallbackClick does
+    // whatever that specific gate needs once triggered.
+    function showClickGateFallbackButton(hintText, onFallbackClick) {
       const wrapper = document.getElementById("tourCallStepFallback");
       wrapper.innerHTML = "";
 
       const hint = document.createElement("p");
       hint.className = "tour-callstep-fallback-hint";
-      hint.textContent = "Haven't clicked yet?";
+      hint.textContent = hintText;
       wrapper.appendChild(hint);
 
       const button = document.createElement("button");
@@ -4686,10 +4788,58 @@
       button.textContent = "Show me";
       button.addEventListener("click", () => {
         wrapper.innerHTML = "";
+        onFallbackClick();
+      });
+      wrapper.appendChild(button);
+    }
+
+    // The call step's own fallback: starts the demo call directly.
+    function showCallStepFallbackButton(phone, handleCallStarted) {
+      showClickGateFallbackButton("Haven't clicked yet?", () => {
         startDemoCall(phone);
         handleCallStarted();
       });
-      wrapper.appendChild(button);
+    }
+
+    // ── Generic click-gate step (currently just "Power Dialer") ──────────
+    // Simpler cousin of the interactive call step above: prompts a click on
+    // a real button, and the moment it's clicked - for real, or via the
+    // "Show me" fallback - ADVANCES to the next step. Unlike the call step,
+    // this does NOT end the tour; it's just a normal step transition.
+    let clickGateState = null;
+
+    function clearClickGateState() {
+      if (!clickGateState) return;
+      const state = clickGateState;
+      clickGateState = null;
+      if (state.showMeTimer) clearTimeout(state.showMeTimer);
+      if (state.onClick) state.targetEl.removeEventListener("click", state.onClick);
+      document.getElementById("tourCallStepFallback").innerHTML = "";
+    }
+
+    function beginClickGateStep(targetEl) {
+      const state = { targetEl };
+      clickGateState = state;
+
+      const handleClicked = () => {
+        if (clickGateState !== state) return; // step already ended
+        if (state.resolved) return; // e.g. the real click AND "Show me" near-simultaneously
+        state.resolved = true;
+        clearClickGateState();
+        goToTourStep(tourStepIndex + 1, 1);
+      };
+
+      state.onClick = handleClicked;
+      targetEl.addEventListener("click", handleClicked);
+
+      // Fallback: if it isn't clicked within a few seconds, offer to do it
+      // on the rep's behalf. Genuinely clicks the REAL button (not a
+      // shortcut) - that's what fires its own real behaviour AND the
+      // handleClicked listener registered above, both from the same event.
+      state.showMeTimer = setTimeout(() => {
+        if (clickGateState !== state) return;
+        showClickGateFallbackButton("Haven't clicked yet?", () => targetEl.click());
+      }, 5000);
     }
 
     // Ends the tour the instant the final step's call actually starts -
@@ -4776,6 +4926,7 @@
     // slate - see clearCallStepState() below.
     async function renderTourStep(index, direction) {
       clearCallStepState();
+      clearClickGateState();
       if (isInCall) endActiveCall("Call ended (demo)");
 
       if (index < 0) return; // can't go back past the first step
@@ -4807,30 +4958,32 @@
       const rect = positionSpotlight(targetEl);
       positionPopup(rect);
 
-      // Only the interactive call step (and only in demo mode - see the
-      // step's own comment) lets the spotlighted element itself be clicked;
-      // every other step keeps the highlight box swallowing clicks like the
-      // dim strips do.
+      // The interactive call step (only in demo mode - see the step's own
+      // comment) and the Power Dialer click-gate (any mode - see its own
+      // comment in TOUR_STEPS) both let the spotlighted element itself be
+      // clicked; every other step keeps the highlight box swallowing
+      // clicks like the dim strips do.
       const isInteractiveNow = !!step.interactive && demoMode;
-      tourHighlightBox.classList.toggle("tour-highlight-box--clickable", isInteractiveNow);
+      const isClickGateNow = !!step.clickGate;
+      const targetIsClickable = isInteractiveNow || isClickGateNow;
+      tourHighlightBox.classList.toggle("tour-highlight-box--clickable", targetIsClickable);
 
       tourStepCounter.textContent = `Step ${index + 1} of ${TOUR_STEPS.length}`;
       tourStepTitle.textContent = step.title;
       tourStepBody.textContent = isInteractiveNow ? step.demoBody || step.body : step.body;
       tourBackButton.style.visibility = index === 0 ? "hidden" : "visible";
 
-      // This is the tour's LAST step (see TOUR_STEPS) - when it's actually
-      // interactive (demo mode), there's no "Continue"/"Done" at all -
-      // clicking the Call button is the only way forward, and doing so ends
-      // the tour itself (see finishTourViaCallStep()). Real signed-in users
-      // get the normal "Done" button instead, since they only see the
-      // passive version of this step.
-      tourNextButton.style.display = isInteractiveNow ? "none" : "";
-      if (!isInteractiveNow) {
+      // Click-gate steps (the LAST step's call button, and the Power Dialer
+      // reveal button) have no "Continue"/"Done" at all - clicking the
+      // spotlighted element itself is the only way forward. Every other
+      // step gets the normal Next/Done button.
+      tourNextButton.style.display = targetIsClickable ? "none" : "";
+      if (!targetIsClickable) {
         tourNextButton.textContent = index === TOUR_STEPS.length - 1 ? "Done" : "Next";
       }
 
       if (isInteractiveNow) beginInteractiveCallStep(targetEl);
+      if (isClickGateNow) beginClickGateStep(targetEl);
     }
 
     // True while a top-level step transition is in flight - some steps
@@ -4873,10 +5026,15 @@
       // Skip/Esc can fire directly (not through renderTourStep), so the
       // interactive call step's own cleanup needs repeating here too.
       clearCallStepState();
+      clearClickGateState();
       if (isInCall) endActiveCall("Call ended (demo)");
 
       if (leadPanel.classList.contains("open")) closeLeadPanel();
       if (profilePanel.classList.contains("open")) closeProfilePanel();
+      // Don't strand the rep in selection mode after the tour ends - but
+      // never wipe out a real, in-progress selection just because the tour
+      // is closing (see collapseDialerSelectionUI()'s own guard against that).
+      if (selectedLeadPhones.size === 0) collapseDialerSelectionUI();
 
       if (!demoMode) {
         fetch("/api/tour/complete", { method: "POST" }).catch(() => {
