@@ -74,6 +74,16 @@ function updateWorkspaceLayout() {
     // pushes live transcript lines to us while a call is active.
     let transcriptSocket = null;
 
+    // Set by startRealCall() right before a REAL call is placed FOR THE
+    // DIALER specifically (dialerOptions.onComplete) - the next "callOutcome"
+    // message on the socket is for that call (only one call is ever active
+    // at a time, so there's no need to match it by phone number). Cleared
+    // the moment it's used. See broadcastCallOutcome() in server.js - this
+    // is the ONLY way the browser learns how a real call actually went,
+    // since Twilio reports that to our SERVER (POST /call-status), never
+    // straight to the browser.
+    let pendingCallOutcomeCallback = null;
+
     // Empties the transcript panel and shows a "listening" placeholder -
     // called each time a new call starts, so old lines don't linger.
     function resetTranscriptPanel() {
@@ -145,6 +155,14 @@ function updateWorkspaceLayout() {
         // don't have a "type" field at all - that's how we tell them apart.
         if (data.type === "tip") {
           addCoachingTip(data.text);
+        } else if (data.type === "callOutcome") {
+          // The power dialer's own signal (see startRealCall() below) -
+          // never shown in the transcript/coaching panels themselves.
+          if (pendingCallOutcomeCallback) {
+            const callback = pendingCallOutcomeCallback;
+            pendingCallOutcomeCallback = null;
+            callback(data.outcome, data.connected);
+          }
         } else {
           addTranscriptLine(data.speaker, data.text);
         }
@@ -247,6 +265,19 @@ function updateWorkspaceLayout() {
       });
     }
 
+    // Set by startDemoCall() whenever the power dialer placed the call
+    // (dialerOptions.onComplete) - resolved from endActiveCall() below,
+    // NOT from inside startDemoCall's own timeouts, specifically so a rep
+    // manually clicking Hang Up EARLY still notifies the dialer (endActive-
+    // Call() is the one chokepoint that always runs, however the call
+    // ended) instead of leaving it stuck waiting for a call that already
+    // finished. Real calls use pendingCallOutcomeCallback instead (see
+    // startRealCall) - Twilio's server-reported outcome, once the
+    // "callOutcome" broadcast arrives, is always more trustworthy than
+    // guessing from a browser-side hang-up, so that one deliberately does
+    // NOT resolve early here.
+    let pendingDemoDialerCompletion = null; // { forcedOutcome, onComplete } | null
+
     // Runs once, whenever the active call finishes, however it finished
     // (hung up, the other side hung up, cancelled, or an error). Shows the
     // final message on the lead's buttons, then resets everything - the
@@ -264,6 +295,15 @@ function updateWorkspaceLayout() {
       updateWorkspaceLayout(); // back to full-width leads, no call panels reserved
       stopTranscriptFeed();
       refreshAllCallButtons();
+
+      if (pendingDemoDialerCompletion) {
+        const { forcedOutcome, onComplete } = pendingDemoDialerCompletion;
+        pendingDemoDialerCompletion = null;
+        // No forcedOutcome means this was the full scripted call, which
+        // always represents "Connected" - whether it finished naturally or
+        // was hung up early partway through.
+        onComplete(forcedOutcome || "Connected", !forcedOutcome);
+      }
     }
 
     // ── DEMO MODE call simulation ────────────────────────────────────────
@@ -288,7 +328,24 @@ function updateWorkspaceLayout() {
     // see the demoMode check in the click handler below, which calls this
     // INSTEAD of ever touching device.connect() or any backend endpoint
     // that could place a real call.
-    function startDemoCall(phone) {
+    //
+    // dialerOptions (optional, used only by the power dialer):
+    //   { forcedOutcome, onComplete(outcome, connected) }
+    // forcedOutcome (e.g. "No answer") skips the scripted conversation
+    // entirely and plays a short, quiet non-connect instead - which is what
+    // a real no-answer/voicemail/busy call actually looks like (brief, no
+    // transcript, then it's over). Leave both out for the normal manual
+    // Call button - behaves exactly as before (the full transcript, always
+    // ending "Connected").
+    function startDemoCall(phone, dialerOptions) {
+      const forcedOutcome = dialerOptions && dialerOptions.forcedOutcome;
+
+      // Registered here, but only ever RESOLVED from endActiveCall() above -
+      // see its own comment for why that matters (an early manual hang-up
+      // must still notify the dialer).
+      pendingDemoDialerCompletion =
+        dialerOptions && dialerOptions.onComplete ? { forcedOutcome, onComplete: dialerOptions.onComplete } : null;
+
       activeCallPhone = phone;
       isInCall = true;
       updateWorkspaceLayout(); // opens the right-hand call panels
@@ -303,6 +360,17 @@ function updateWorkspaceLayout() {
       resetTranscriptPanel();
       resetCoachingPanel();
       refreshAllCallButtons("Connecting...");
+
+      if (forcedOutcome) {
+        setTimeout(() => {
+          if (isInCall && activeCallPhone === phone) refreshAllCallButtons(forcedOutcome + " (demo)");
+        }, 900);
+        setTimeout(() => {
+          if (!isInCall || activeCallPhone !== phone) return; // hung up early - endActiveCall() already ran
+          endActiveCall(forcedOutcome + " (demo)"); // resolves pendingDemoDialerCompletion itself
+        }, 1900);
+        return;
+      }
 
       setTimeout(() => {
         if (isInCall) refreshAllCallButtons("Ringing...");
@@ -321,10 +389,73 @@ function updateWorkspaceLayout() {
 
       const totalDurationMs = DEMO_FIRST_LINE_DELAY_MS + DEMO_CALL_TRANSCRIPT.length * DEMO_LINE_DELAY_MS + 1200;
       setTimeout(() => {
-        if (!isInCall || activeCallPhone !== phone) return;
+        if (!isInCall || activeCallPhone !== phone) return; // hung up early - endActiveCall() already ran
         addCoachingTip("📋 Post-call (demo): Connected - Warm interest, wants an onboarding timeline before deciding.");
-        endActiveCall("Call ended (demo) — Connected");
+        endActiveCall("Call ended (demo) — Connected"); // resolves pendingDemoDialerCompletion itself
       }, totalDurationMs);
+    }
+
+    // Starts a REAL call to this phone number - shared by the manual Call
+    // button (see attachCallHandlers below) and the power dialer, which
+    // calls this directly (no click involved) when auto-dialing through its
+    // queue. dialerOptions (optional): { onComplete(outcome, connected) } -
+    // see pendingCallOutcomeCallback above for how the outcome actually
+    // arrives.
+    async function startRealCall(phone, dialerOptions) {
+      if (!device) {
+        deviceStatus.textContent = "Calling isn't ready yet - please wait a moment.";
+        if (dialerOptions && dialerOptions.onComplete) dialerOptions.onComplete("Unknown", false);
+        return;
+      }
+
+      activeCallPhone = phone;
+      isInCall = true;
+      updateWorkspaceLayout(); // opens the right-hand call panels
+      // Same reason as startDemoCall() above - don't let the lead panel
+      // (or the profile panel, if that's what's open) sit on top of the
+      // Live Transcript/AI Coach columns this just opened.
+      closeLeadPanel();
+      if (typeof closeProfilePanel === "function") closeProfilePanel();
+      refreshAllCallButtons("Connecting...");
+      startTranscriptFeed();
+
+      if (dialerOptions && dialerOptions.onComplete) {
+        pendingCallOutcomeCallback = dialerOptions.onComplete;
+        // Safety net: if the callOutcome message is ever dropped (a flaky
+        // connection, a server hiccup), don't leave the dialer waiting
+        // forever - treat it as unknown/non-connect and let it move on.
+        setTimeout(() => {
+          if (pendingCallOutcomeCallback === dialerOptions.onComplete) {
+            pendingCallOutcomeCallback = null;
+            dialerOptions.onComplete("Unknown", false);
+          }
+        }, 20000);
+      }
+
+      try {
+        // Start a real WebRTC call. The "To" param is read by our backend's
+        // POST /voice endpoint, which tells Twilio which number to dial.
+        // "callerEmail" rides along the same way - /voice forwards it into
+        // /call-status's callback URL, since Twilio calls that with no
+        // browser session at all, so it needs another way to know WHICH
+        // signed-in user's sheet this call belongs to.
+        activeCall = await device.connect({ params: { To: phone, callerEmail: currentUserEmail || "" } });
+
+        activeCall.on("accept", () => refreshAllCallButtons("In Call"));
+        activeCall.on("disconnect", () => endActiveCall("Call ended"));
+        activeCall.on("cancel", () => endActiveCall("Call cancelled"));
+        activeCall.on("error", (error) => endActiveCall("Call error: " + error.message));
+      } catch (error) {
+        endActiveCall("Could not start call: " + error.message);
+        // The call never even started, so no Twilio webhook will EVER
+        // arrive for it - resolve the dialer right away instead of making
+        // it wait out the full 20s fallback above for nothing.
+        if (pendingCallOutcomeCallback) {
+          const callback = pendingCallOutcomeCallback;
+          pendingCallOutcomeCallback = null;
+          callback("Unknown", false);
+        }
+      }
     }
 
     // Wires up a Call/Hang Up button pair for one phone number, and
@@ -358,42 +489,12 @@ function updateWorkspaceLayout() {
 
         // DEMO MODE: run the fake call instead - never touches device,
         // Twilio, or any backend endpoint that could place a real call.
+        // Real calls go through startRealCall() - the SAME function the
+        // power dialer calls directly when auto-dialing (see index.html).
         if (demoMode) {
           startDemoCall(phone);
-          return;
-        }
-
-        if (!device) {
-          callStatus.textContent = "Calling isn't ready yet - please wait a moment.";
-          return;
-        }
-
-        activeCallPhone = phone;
-        isInCall = true;
-        updateWorkspaceLayout(); // opens the right-hand call panels
-        // Same reason as startDemoCall() above - don't let the lead panel
-        // (or the profile panel, if that's what's open) sit on top of the
-        // Live Transcript/AI Coach columns this just opened.
-        closeLeadPanel();
-        if (typeof closeProfilePanel === "function") closeProfilePanel();
-        refreshAllCallButtons("Connecting...");
-        startTranscriptFeed();
-
-        try {
-          // Start a real WebRTC call. The "To" param is read by our backend's
-          // POST /voice endpoint, which tells Twilio which number to dial.
-          // "callerEmail" rides along the same way - /voice forwards it into
-          // /call-status's callback URL, since Twilio calls that with no
-          // browser session at all, so it needs another way to know WHICH
-          // signed-in user's sheet this call belongs to.
-          activeCall = await device.connect({ params: { To: phone, callerEmail: currentUserEmail || "" } });
-
-          activeCall.on("accept", () => refreshAllCallButtons("In Call"));
-          activeCall.on("disconnect", () => endActiveCall("Call ended"));
-          activeCall.on("cancel", () => endActiveCall("Call cancelled"));
-          activeCall.on("error", (error) => endActiveCall("Call error: " + error.message));
-        } catch (error) {
-          endActiveCall("Could not start call: " + error.message);
+        } else {
+          await startRealCall(phone);
         }
       });
 

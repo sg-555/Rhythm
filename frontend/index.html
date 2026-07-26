@@ -1409,6 +1409,101 @@
       background: var(--warm-bg-hover);
     }
 
+    /* ── Power dialer bar ─────────────────────────────────────────────────
+       One bar, two rows - only ONE of which is ever visible at a time
+       (toggled via inline style.display, see the "Power dialer" script
+       section): .dialer-row for building the queue (selection controls),
+       and a second .dialer-row for the live session (position/status/
+       pause/stop). Both share the same card treatment as the call-backs
+       indicator above, so it reads as part of the same "always-visible
+       controls" family. */
+    .dialer-bar {
+      margin-bottom: var(--sp-5);
+      padding: var(--sp-3) var(--sp-4);
+      box-sizing: border-box;
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-card);
+      border-radius: var(--radius-md);
+    }
+
+    .dialer-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--sp-2);
+      font-size: 0.9rem;
+    }
+
+    .dialer-selection-count {
+      color: var(--ink-muted);
+      font-weight: 600;
+      min-width: 0; /* lets it wrap/shrink instead of forcing the row wider */
+    }
+
+    .dialer-gap-label {
+      color: var(--ink-muted);
+      margin-left: auto; /* pushes the gap-setting + Start button to the right */
+    }
+
+    .dialer-row select {
+      font-family: inherit;
+      font-size: var(--text-meta);
+      padding: var(--sp-1) var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-page);
+      color: var(--ink);
+    }
+
+    .dialer-position-text {
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .dialer-status-text {
+      color: var(--ink-muted);
+      flex: 1 1 auto; /* takes up the remaining space so the buttons stay right-aligned */
+      min-width: 0;
+    }
+
+    /* One row per queued lead in the "View queue" panel - name/phone on the
+       left, a small × to remove it on the right. */
+    .dialer-queue-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-2);
+      padding: var(--sp-2) 0;
+      border-bottom: 1px solid var(--border);
+      font-size: var(--text-body);
+    }
+
+    .dialer-queue-remove-button {
+      background: none;
+      border: none;
+      font-size: 1.1rem;
+      line-height: 1;
+      color: var(--ink-faint);
+      cursor: pointer;
+      padding: 0 var(--sp-1);
+    }
+
+    .dialer-queue-remove-button:hover {
+      color: var(--danger);
+    }
+
+    /* The per-row checkbox that builds the dialer's queue - narrow column,
+       vertically centered with the rest of the row's cells. */
+    .checkbox-cell {
+      width: 1px; /* shrinks to fit the checkbox - the browser still renders
+                     it wide enough, this just stops it stretching further */
+      text-align: center;
+    }
+
+    .lead-select-checkbox {
+      cursor: pointer;
+    }
+
     /* Status/Temperature/Search controls, above the leads table - one row,
        wraps on narrow screens instead of overflowing. */
     .filter-row {
@@ -2136,6 +2231,37 @@
          soon - see loadCallbacksIndicator(). -->
     <a id="callbacksIndicator" class="callbacks-indicator" href="callbacks.html">📞 Call-backs (0)</a>
 
+    <!-- Power dialer: build a queue by checking leads below, then auto-dial
+         through it. ONE bar, two visual states swapped via display:none -
+         "selection" (build the queue) while nothing's running, "session"
+         once "Start dialing" is clicked. See the "Power dialer" script
+         section for the full state machine. -->
+    <div id="dialerBar" class="dialer-bar">
+      <div id="dialerSelectionRow" class="dialer-row">
+        <button type="button" id="selectAllButton" class="btn-secondary">Select all</button>
+        <button type="button" id="selectAllFilteredButton" class="btn-secondary">Select all filtered</button>
+        <button type="button" id="clearSelectionButton" class="btn-secondary">Clear selection</button>
+        <span id="dialerSelectionCount" class="dialer-selection-count"></span>
+        <label for="dialerGapSeconds" class="dialer-gap-label">Gap between calls:</label>
+        <select id="dialerGapSeconds">
+          <option value="5">5s</option>
+          <option value="10">10s</option>
+          <option value="15" selected>15s</option>
+          <option value="30">30s</option>
+          <option value="60">60s</option>
+        </select>
+        <button type="button" id="dialerStartButton" class="call-button" disabled>Start dialing</button>
+      </div>
+
+      <div id="dialerSessionRow" class="dialer-row" style="display: none;">
+        <span id="dialerPositionText" class="dialer-position-text"></span>
+        <span id="dialerStatusText" class="dialer-status-text"></span>
+        <button type="button" id="dialerViewQueueButton" class="btn-secondary">View queue</button>
+        <button type="button" id="dialerPauseButton" class="btn-secondary">Pause</button>
+        <button type="button" id="dialerStopButton" class="btn-secondary">Stop dialing</button>
+      </div>
+    </div>
+
     <div class="filter-row">
       <!-- Options are rebuilt from whatever Status values actually appear in
            the sheet right now - see rebuildStatusFilterOptions() - so this
@@ -2233,6 +2359,15 @@
     <button id="panelCloseButton" class="panel-close-button" aria-label="Close">×</button>
     <!-- Filled in by renderLeadPanel() each time a lead is opened -->
     <div id="panelContent" class="panel-content"></div>
+  </div>
+
+  <!-- Dialer queue panel: lets the rep see/remove leads from the power
+       dialer's queue before/while it's running. Same slide-in panel
+       pattern as the lead detail panel above. -->
+  <div id="dialerQueuePanelOverlay" class="panel-overlay"></div>
+  <div id="dialerQueuePanel" class="lead-panel">
+    <button id="dialerQueuePanelCloseButton" class="panel-close-button" aria-label="Close">×</button>
+    <div id="dialerQueuePanelContent" class="panel-content"></div>
   </div>
 
   <!-- Pop-in call-back reminder toasts get added here (see showReminderToast) -->
@@ -2955,12 +3090,38 @@
       return cell;
     }
 
+    // Builds the checkbox cell that adds/removes this lead from the power
+    // dialer's selection (selectedLeadPhones - see "Power dialer" further
+    // down). Checked state is read from that Set every render, so it
+    // survives filtering/pagination/re-renders until explicitly cleared.
+    function createDialerCheckboxCell(lead) {
+      const cell = document.createElement("td");
+      cell.className = "checkbox-cell";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "lead-select-checkbox";
+      checkbox.checked = selectedLeadPhones.has(lead.Phone);
+      checkbox.setAttribute("aria-label", `Select ${lead.Name || lead.Phone} for the dialer`);
+      checkbox.addEventListener("click", (event) => {
+        // Stop the click from also bubbling up to the row's own click
+        // handler, which would otherwise open the lead detail panel too.
+        event.stopPropagation();
+        handleDialerCheckboxClick(lead.Phone, checkbox.checked, event.shiftKey);
+      });
+      cell.appendChild(checkbox);
+
+      return cell;
+    }
+
     // Builds a table row for a single lead, including its own Call/Hang Up
     // buttons, and makes the whole row clickable to open the detail panel.
     function createLeadRow(lead) {
       const row = document.createElement("tr");
       if (lead.Due) row.classList.add("due-row");
+      row.dataset.phone = lead.Phone; // read back by shift-click range-select - see handleDialerCheckboxClick()
 
+      row.appendChild(createDialerCheckboxCell(lead));
       row.appendChild(createNameCell(lead));
       row.appendChild(createCell(lead.Phone));
       row.appendChild(createCell(lead.Status));
@@ -3028,6 +3189,7 @@
       table.innerHTML = `
         <thead>
           <tr>
+            <th></th>
             <th>Name</th>
             <th>Phone</th>
             <th>Status</th>
@@ -3793,6 +3955,403 @@
         createSheetButton.disabled = false;
         createSheetStatus.textContent = "Error: " + error.message;
       }
+    });
+
+    // ── Power dialer ─────────────────────────────────────────────────────
+    // A POWER dialer, never a predictive one: only ONE call is ever in
+    // flight (it reuses startRealCall()/startDemoCall() from
+    // shared-lead-panel.js - the exact same functions a manual Call button
+    // click uses, so every call still transcribes/coaches/logs/writes the
+    // sheet normally). It auto-advances ONLY through non-connects (no
+    // answer, busy, voicemail, failed) after a visible, cancellable
+    // countdown - a CONNECT stops it completely until the rep resumes it.
+    //
+    // Two independent pieces of state:
+    //  - selectedLeadPhones: which checkboxes are currently ticked, used to
+    //    BUILD a queue. Survives filtering/pagination until cleared.
+    //  - dialerQueue/dialerState: the ACTUAL session, once "Start dialing"
+    //    is clicked - a separate list, so changing filters mid-session
+    //    never disturbs it.
+
+    // ── Building the queue (checkboxes + bulk select) ────────────────────
+    const selectedLeadPhones = new Set();
+    let lastCheckedPhoneForShiftSelect = null; // shift-click range anchor
+
+    const dialerSelectionCount = document.getElementById("dialerSelectionCount");
+    const dialerStartButton = document.getElementById("dialerStartButton");
+    const selectAllButton = document.getElementById("selectAllButton");
+    const selectAllFilteredButton = document.getElementById("selectAllFilteredButton");
+    const clearSelectionButton = document.getElementById("clearSelectionButton");
+
+    // Re-renders the table so every checkbox reflects selectedLeadPhones -
+    // simplest way to keep potentially MANY rows (shift-click range, select
+    // all) in sync at once, rather than hand-patching each one.
+    function refreshLeadsTableAndSelectionUI() {
+      renderLeadsTable(leadsLastFilteredList);
+      const count = selectedLeadPhones.size;
+      dialerSelectionCount.textContent = count > 0 ? `${count} lead${count === 1 ? "" : "s"} queued` : "";
+      dialerStartButton.disabled = count === 0;
+    }
+
+    // Called by each row's checkbox (see createDialerCheckboxCell above).
+    // shiftKey selects/deselects every row BETWEEN the last-clicked one and
+    // this one, in the CURRENTLY RENDERED page's order - the standard
+    // spreadsheet/file-picker range-select gesture.
+    function handleDialerCheckboxClick(phone, isNowChecked, shiftKey) {
+      if (shiftKey && lastCheckedPhoneForShiftSelect) {
+        const rowPhones = Array.from(document.querySelectorAll("#leadsTableScroll tbody tr")).map((row) => row.dataset.phone);
+        const fromIndex = rowPhones.indexOf(lastCheckedPhoneForShiftSelect);
+        const toIndex = rowPhones.indexOf(phone);
+        if (fromIndex !== -1 && toIndex !== -1) {
+          const [start, end] = fromIndex < toIndex ? [fromIndex, toIndex] : [toIndex, fromIndex];
+          for (let i = start; i <= end; i++) {
+            if (isNowChecked) selectedLeadPhones.add(rowPhones[i]);
+            else selectedLeadPhones.delete(rowPhones[i]);
+          }
+        }
+      } else if (isNowChecked) {
+        selectedLeadPhones.add(phone);
+      } else {
+        selectedLeadPhones.delete(phone);
+      }
+
+      lastCheckedPhoneForShiftSelect = phone;
+      refreshLeadsTableAndSelectionUI();
+    }
+
+    // "Select all" - every lead on the CURRENT page (respects pagination,
+    // a quick "select what I see" action).
+    selectAllButton.addEventListener("click", () => {
+      const pageStart = (leadsCurrentPage - 1) * leadsPageSize;
+      const pageLeads = leadsLastFilteredList.slice(pageStart, pageStart + leadsPageSize);
+      pageLeads.forEach((lead) => selectedLeadPhones.add(lead.Phone));
+      refreshLeadsTableAndSelectionUI();
+    });
+
+    // "Select all filtered" - every lead matching the CURRENT Status/
+    // Temperature/Search filters, across ALL pages, not just this one.
+    selectAllFilteredButton.addEventListener("click", () => {
+      leadsLastFilteredList.forEach((lead) => selectedLeadPhones.add(lead.Phone));
+      refreshLeadsTableAndSelectionUI();
+    });
+
+    clearSelectionButton.addEventListener("click", () => {
+      selectedLeadPhones.clear();
+      refreshLeadsTableAndSelectionUI();
+    });
+
+    // ── The dialing session itself ───────────────────────────────────────
+    let dialerQueue = []; // leads still left to call, in order - [{name, phone}, ...]
+    let dialerTotalCount = 0; // the queue's original size, for "3 of 12"
+    let dialerStats = { called: 0, connected: 0, skipped: 0 };
+    // "dialing" (a call is in flight) | "counting-down" (between calls) |
+    // "paused" (countdown frozen) | "connected-wait" (stopped for the rep) |
+    // "idle" (no session)
+    let dialerState = "idle";
+    let dialerCountdownTimer = null;
+    let dialerCountdownRemaining = 0;
+    let dialerGapSeconds = 15;
+
+    const dialerSelectionRow = document.getElementById("dialerSelectionRow");
+    const dialerSessionRow = document.getElementById("dialerSessionRow");
+    const dialerGapSecondsSelect = document.getElementById("dialerGapSeconds");
+    const dialerPositionText = document.getElementById("dialerPositionText");
+    const dialerStatusText = document.getElementById("dialerStatusText");
+    const dialerPauseButton = document.getElementById("dialerPauseButton");
+    const dialerStopButton = document.getElementById("dialerStopButton");
+    const dialerViewQueueButton = document.getElementById("dialerViewQueueButton");
+    const dialerQueuePanelOverlay = document.getElementById("dialerQueuePanelOverlay");
+    const dialerQueuePanel = document.getElementById("dialerQueuePanel");
+    const dialerQueuePanelContent = document.getElementById("dialerQueuePanelContent");
+    const dialerQueuePanelCloseButton = document.getElementById("dialerQueuePanelCloseButton");
+
+    dialerGapSecondsSelect.addEventListener("change", () => {
+      dialerGapSeconds = parseInt(dialerGapSecondsSelect.value, 10);
+    });
+
+    dialerStartButton.addEventListener("click", () => {
+      if (isInCall) {
+        // Shouldn't normally be reachable (every Call button is disabled
+        // mid-call too), but keeps this button just as safe as any other.
+        return;
+      }
+
+      // The queue is built from the CURRENT filtered list, IN THE ORDER
+      // SHOWN - not selection-click order - keeping only leads still
+      // checked right now.
+      const queue = leadsLastFilteredList
+        .filter((lead) => selectedLeadPhones.has(lead.Phone))
+        .map((lead) => ({ name: lead.Name, phone: lead.Phone }));
+      startDialerSession(queue);
+    });
+
+    function startDialerSession(queue) {
+      dialerQueue = queue;
+      dialerTotalCount = queue.length;
+      dialerStats = { called: 0, connected: 0, skipped: 0 };
+
+      // The queue is now its own separate list - clear the checkboxes so
+      // there's no confusion between "selected" and "queued".
+      selectedLeadPhones.clear();
+      refreshLeadsTableAndSelectionUI();
+
+      dialerSelectionRow.style.display = "none";
+      dialerSessionRow.style.display = "flex";
+      dialerStopButton.disabled = false;
+
+      // Starts with a countdown too, same as between any two calls - gives
+      // the rep a moment to open "View queue" and remove anyone before the
+      // FIRST call goes out, not just later ones.
+      beginDialerCountdown();
+    }
+
+    // Pulls the next lead off the queue and actually dials it. Invalid
+    // entries (no phone number) are skipped instantly, one at a time (with
+    // a brief note so it's not invisible), rather than stalling the session.
+    function dialerDialNext() {
+      // Guards against a STALE pending call (the skip-retry or the
+      // waiting-for-an-external-call retry below, both on their own
+      // setTimeout) firing after the session already ended - e.g. Stop
+      // Dialing was clicked while one of those was still pending.
+      if (dialerState === "idle") return;
+
+      if (dialerQueue.length === 0) {
+        finishDialerSession();
+        return;
+      }
+
+      if (isInCall) {
+        // A call is already active - started manually, outside the dialer
+        // (e.g. the rep called someone else while paused/waiting). Don't
+        // dial over it - just wait for it to end. Deliberately NOT
+        // "dialing" - stopDialerSession() only hangs up when THAT state is
+        // set, and this call isn't the dialer's to hang up on.
+        dialerState = "waiting-for-external-call";
+        dialerStatusText.textContent = "Waiting for the current call to finish...";
+        setTimeout(dialerDialNext, 1000);
+        return;
+      }
+
+      const lead = dialerQueue[0];
+      if (!lead.phone || !lead.phone.trim()) {
+        dialerQueue.shift();
+        dialerStats.skipped++;
+        dialerStatusText.textContent = `Skipping ${lead.name || "(no name)"} - no phone number.`;
+        setTimeout(dialerDialNext, 800); // brief pause so the note is actually readable
+        return;
+      }
+
+      dialerQueue.shift();
+      dialerState = "dialing";
+      dialerStats.called++;
+      dialerPauseButton.style.display = "none"; // nothing to pause mid-call
+      updateDialerPositionText();
+      dialerStatusText.textContent = `Dialing ${lead.name || lead.phone}...`;
+
+      const onComplete = (outcome, connected) => dialerHandleOutcome(lead, outcome, connected);
+
+      if (demoMode) {
+        // Simulates a REALISTIC mix of outcomes so the dialer can actually
+        // demonstrate BOTH behaviours - most calls auto-advance quickly,
+        // occasionally one "connects" and the dialer stops. Never touches
+        // Twilio or costs anything - see startDemoCall() for the "forced
+        // outcome" branch this uses.
+        startDemoCall(lead.phone, { forcedOutcome: pickDemoDialerOutcome(), onComplete });
+      } else {
+        startRealCall(lead.phone, { onComplete });
+      }
+    }
+
+    // Demo mode's simulated outcome for one dialer call - null means "let
+    // it play the full scripted Connected call" (see startDemoCall).
+    function pickDemoDialerOutcome() {
+      const roll = Math.random();
+      if (roll < 0.35) return null; // Connected
+      if (roll < 0.55) return "No answer";
+      if (roll < 0.75) return "Voicemail";
+      if (roll < 0.9) return "Busy";
+      return "Failed";
+    }
+
+    function updateDialerPositionText() {
+      const processed = dialerStats.called + dialerStats.skipped;
+      dialerPositionText.textContent = `${processed} of ${dialerTotalCount}`;
+    }
+
+    // The ONE rule that makes this a power dialer and not a predictive one:
+    // a CONNECT stops everything, no countdown, no auto-advance - the rep
+    // gets the conversation entirely to themselves until they choose to
+    // continue. Anything else auto-advances after a visible countdown.
+    function dialerHandleOutcome(lead, outcome, connected) {
+      if (connected) {
+        dialerStats.connected++;
+        dialerState = "connected-wait";
+        updateDialerPositionText();
+        dialerStatusText.textContent = "Connected - take your time. Click Resume dialing when you're ready to continue.";
+        dialerPauseButton.textContent = "Resume dialing";
+        dialerPauseButton.style.display = "inline-block";
+        dialerPauseButton.onclick = dialerResumeAfterConnect;
+        return;
+      }
+
+      dialerStatusText.textContent = `${lead.name || lead.phone}: ${outcome}.`;
+      beginDialerCountdown();
+    }
+
+    function dialerResumeAfterConnect() {
+      dialerPauseButton.onclick = dialerTogglePause; // back to the normal pause/resume behaviour
+      beginDialerCountdown();
+    }
+
+    // Shows a cancellable countdown to the NEXT call, naming who it is -
+    // never a blind fixed timer with no visible target. Skips straight to
+    // finishing if the queue's already empty.
+    function beginDialerCountdown() {
+      if (dialerQueue.length === 0) {
+        finishDialerSession();
+        return;
+      }
+
+      dialerState = "counting-down";
+      dialerCountdownRemaining = dialerGapSeconds;
+      dialerPauseButton.textContent = "Pause";
+      dialerPauseButton.style.display = "inline-block";
+      dialerPauseButton.onclick = dialerTogglePause;
+      updateDialerCountdownText();
+
+      dialerCountdownTimer = setInterval(dialerCountdownTick, 1000);
+    }
+
+    function dialerCountdownTick() {
+      dialerCountdownRemaining--;
+      if (dialerCountdownRemaining <= 0) {
+        clearInterval(dialerCountdownTimer);
+        dialerCountdownTimer = null;
+        dialerDialNext();
+      } else {
+        updateDialerCountdownText();
+      }
+    }
+
+    function updateDialerCountdownText() {
+      const next = dialerQueue[0];
+      updateDialerPositionText();
+      dialerStatusText.textContent = `Next: ${next.name || next.phone} in ${dialerCountdownRemaining}s`;
+    }
+
+    // Pause/Resume toggle - only meaningful DURING a countdown (see
+    // dialerPauseButton.onclick, which points elsewhere - "Resume dialing" -
+    // right after a connect instead). Halts auto-advancing IMMEDIATELY.
+    function dialerTogglePause() {
+      if (dialerState === "paused") {
+        dialerState = "counting-down";
+        dialerPauseButton.textContent = "Pause";
+        dialerCountdownTimer = setInterval(dialerCountdownTick, 1000);
+        updateDialerCountdownText();
+      } else {
+        dialerState = "paused";
+        clearInterval(dialerCountdownTimer);
+        dialerCountdownTimer = null;
+        dialerPauseButton.textContent = "Resume";
+        const next = dialerQueue[0];
+        dialerStatusText.textContent = `Paused - ${next.name || next.phone} is next.`;
+      }
+    }
+
+    // Ends the session early. Only hangs up a call that's still ringing/
+    // connecting (dialerState "dialing") - NEVER one the rep is actually
+    // mid-conversation on ("connected-wait"), since Stop means stop the
+    // QUEUE, not walk out on whoever they're talking to.
+    function stopDialerSession() {
+      if (dialerCountdownTimer) {
+        clearInterval(dialerCountdownTimer);
+        dialerCountdownTimer = null;
+      }
+      if (dialerState === "dialing" && isInCall) {
+        if (demoMode) endActiveCall("Call ended (demo) - dialer stopped");
+        else if (activeCall) activeCall.disconnect();
+      }
+      dialerQueue = [];
+      finishDialerSession();
+    }
+
+    dialerStopButton.addEventListener("click", stopDialerSession);
+
+    // Queue exhausted (or stopped early) - shows a short summary, then folds
+    // the bar back down to the normal "build a queue" state after a few
+    // seconds so it doesn't linger forever.
+    function finishDialerSession() {
+      dialerState = "idle";
+      if (dialerCountdownTimer) {
+        clearInterval(dialerCountdownTimer);
+        dialerCountdownTimer = null;
+      }
+
+      const { called, connected, skipped } = dialerStats;
+      dialerPositionText.textContent = "Session ended";
+      let summary = `${called} call${called === 1 ? "" : "s"} placed, ${connected} connected`;
+      if (skipped > 0) summary += `, ${skipped} skipped (no phone number)`;
+      dialerStatusText.textContent = summary;
+      dialerPauseButton.style.display = "none";
+      dialerStopButton.disabled = true;
+
+      setTimeout(() => {
+        dialerSessionRow.style.display = "none";
+        dialerSelectionRow.style.display = "flex";
+      }, 6000);
+    }
+
+    // ── "View queue" panel: see/remove leads before or during dialing ────
+    function closeDialerQueuePanel() {
+      dialerQueuePanel.classList.remove("open");
+      dialerQueuePanelOverlay.classList.remove("open");
+    }
+
+    dialerQueuePanelCloseButton.addEventListener("click", closeDialerQueuePanel);
+    dialerQueuePanelOverlay.addEventListener("click", closeDialerQueuePanel);
+
+    function renderDialerQueuePanel() {
+      dialerQueuePanelContent.innerHTML = "";
+
+      const heading = document.createElement("h2");
+      heading.textContent = "Dialer queue";
+      dialerQueuePanelContent.appendChild(heading);
+
+      if (dialerQueue.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "message";
+        empty.textContent = "Nothing left in the queue.";
+        dialerQueuePanelContent.appendChild(empty);
+        return;
+      }
+
+      dialerQueue.forEach((lead, index) => {
+        const row = document.createElement("div");
+        row.className = "dialer-queue-row";
+
+        const label = document.createElement("span");
+        label.textContent = `${index + 1}. ${lead.name || "(no name)"} - ${lead.phone || "(no phone)"}`;
+        row.appendChild(label);
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "dialer-queue-remove-button";
+        removeButton.textContent = "×";
+        removeButton.setAttribute("aria-label", "Remove from queue");
+        removeButton.addEventListener("click", () => {
+          dialerQueue.splice(index, 1);
+          renderDialerQueuePanel(); // refresh the list in place
+        });
+        row.appendChild(removeButton);
+
+        dialerQueuePanelContent.appendChild(row);
+      });
+    }
+
+    dialerViewQueueButton.addEventListener("click", () => {
+      renderDialerQueuePanel();
+      dialerQueuePanel.classList.add("open");
+      dialerQueuePanelOverlay.classList.add("open");
     });
 
     // ── Guided product tour ──────────────────────────────────────────────

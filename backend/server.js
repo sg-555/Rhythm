@@ -2443,6 +2443,13 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
 
   const outcome = mapCallStatusToOutcome(CallStatus, SipResponseCode);
 
+  // Tell the browser the outcome RIGHT AWAY - everything below (sheet
+  // writes, AI insight generation) can take several seconds, and the power
+  // dialer needs to know NOW whether to auto-advance (not connected) or
+  // stop and hand control back to the rep (connected) - it shouldn't have
+  // to wait for the slower stuff to finish first.
+  broadcastCallOutcome(To, outcome, outcome === "Connected");
+
   // Resolve WHICH user's sheet this call belongs to, ONCE, up front. If we
   // can't (missing/unknown email, expired tokens), we still log the call
   // for analytics below, just without a name/temperature pulled from any
@@ -2701,6 +2708,23 @@ function broadcastTranscriptLine(speaker, text) {
 // so the frontend can tell the two apart on the same /browser-feed socket.
 function broadcastCoachingTip(text) {
   const message = JSON.stringify({ type: "tip", text });
+
+  for (const client of browserFeedClients) {
+    if (client.readyState === client.OPEN) {
+      client.send(message);
+    }
+  }
+}
+
+// Tells the browser how a just-finished REAL call actually went (Connected,
+// No answer, Busy, ...) - the power dialer's ONLY way to find this out,
+// since Twilio reports it to our SERVER (see /call-status below), never
+// straight to the browser. Sent as its own "callOutcome" type on the same
+// socket as transcript lines/tips, but never shown in either of those
+// panels - see startRealCall()'s pendingCallOutcomeCallback in
+// shared-lead-panel.js, which is what actually reads this.
+function broadcastCallOutcome(phone, outcome, connected) {
+  const message = JSON.stringify({ type: "callOutcome", phone, outcome, connected });
 
   for (const client of browserFeedClients) {
     if (client.readyState === client.OPEN) {
