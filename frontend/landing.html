@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rhythm.ai — Find your rhythm. Close more.</title>
+  <meta name="description" content="Rhythm.ai dials, transcribes, coaches, and follows up for you - so sales calls turn into closed deals, not spreadsheet busywork.">
+
+  <!-- Same theme-persistence trick as the app pages: applies a returning
+       visitor's saved choice BEFORE paint, so there's no flash of the wrong
+       theme. Nothing to save FROM here (this page has no theme toggle) -
+       it just reads whatever the app already stored. -->
+  <script>
+    (function () {
+      var saved = localStorage.getItem("rhythmTheme");
+      if (saved === "dark" || saved === "light") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Design tokens ──────────────────────────────────────────────────
+       Copied from the app's own token set (index.html) so this page reads
+       as the SAME product, not a separate marketing site. Only the tokens
+       this page actually uses are included - see index.html for the full
+       set and the reasoning behind each value (contrast fixes, etc.). */
+    :root {
+      color-scheme: light;
+      --bg-page: #FAF9F7;
+      --bg-subtle: #F0ECE5;
+      --bg-surface: #FFFFFF;
+      --bg-hover: #F5F1EA;
+
+      --ink: #211D18;
+      --ink-muted: #6E6459;
+      --ink-faint: #7A6F60;
+      --border: #E4DFD6;
+      --border-strong: #D2CABC;
+
+      --interactive: #4A90E2;
+
+      --accent: #1E8549;
+      --accent-hover: #186839;
+      --accent-ink: #1B7943;
+      --accent-bg: #E9F9EF;
+      --on-accent: #FFFFFF;
+
+      --cold-bg: #D8EEEA;
+      --cold-ink: #0E5F55;
+      --warm-bg: #FBE3B8;
+      --warm-ink: #8A5900;
+      --hot-bg: #F8D2CA;
+      --hot-ink: #A32E1F;
+
+      --font-display: "Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+      --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
+      --shadow-lifted: 0 12px 32px rgba(33, 29, 24, 0.12), 0 2px 8px rgba(33, 29, 24, 0.08);
+      --transition: 160ms ease;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg-page: #1A1714;
+        --bg-subtle: #2A241D;
+        --bg-surface: #221E1A;
+        --bg-hover: #302A22;
+
+        --ink: #EDE6DA;
+        --ink-muted: #A89C8B;
+        --ink-faint: #948A7A;
+        --border: #342E26;
+        --border-strong: #453D32;
+
+        --accent-ink: #6FDB9E;
+        --accent-bg: #182A20;
+
+        --cold-bg: #16302C;
+        --cold-ink: #5FC4B0;
+        --warm-bg: #3A2E14;
+        --warm-ink: #E8B84B;
+        --hot-bg: #3A1F1B;
+        --hot-ink: #E8927E;
+
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+        --shadow-lifted: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+    }
+
+    /* Manual override - set if this browser previously chose a theme
+       inside the app itself (see the inline script above). Wins over both
+       rules above, same specificity reasoning as index.html. */
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg-page: #1A1714;
+      --bg-subtle: #2A241D;
+      --bg-surface: #221E1A;
+      --bg-hover: #302A22;
+      --ink: #EDE6DA;
+      --ink-muted: #A89C8B;
+      --ink-faint: #948A7A;
+      --border: #342E26;
+      --border-strong: #453D32;
+      --accent-ink: #6FDB9E;
+      --accent-bg: #182A20;
+      --cold-bg: #16302C;
+      --cold-ink: #5FC4B0;
+      --warm-bg: #3A2E14;
+      --warm-ink: #E8B84B;
+      --hot-bg: #3A1F1B;
+      --hot-ink: #E8927E;
+      --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+      --shadow-lifted: 0 12px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg-page: #FAF9F7;
+      --bg-subtle: #F0ECE5;
+      --bg-surface: #FFFFFF;
+      --bg-hover: #F5F1EA;
+      --ink: #211D18;
+      --ink-muted: #6E6459;
+      --ink-faint: #7A6F60;
+      --border: #E4DFD6;
+      --border-strong: #D2CABC;
+      --accent-ink: #1B7943;
+      --accent-bg: #E9F9EF;
+      --cold-bg: #D8EEEA;
+      --cold-ink: #0E5F55;
+      --warm-bg: #FBE3B8;
+      --warm-ink: #8A5900;
+      --hot-bg: #F8D2CA;
+      --hot-ink: #A32E1F;
+      --shadow-card: 0 1px 2px rgba(33, 29, 24, 0.06), 0 2px 6px rgba(33, 29, 24, 0.06);
+      --shadow-lifted: 0 12px 32px rgba(33, 29, 24, 0.12), 0 2px 8px rgba(33, 29, 24, 0.08);
+    }
+
+    /* Minimal, purposeful animation only - no decorative motion anywhere on
+       this page, but the rule still exists as a hard guarantee. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    :focus-visible {
+      outline: 2px solid var(--interactive);
+      outline-offset: 2px;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--font-sans);
+      background: var(--bg-page);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+
+    h1, h2, h3 {
+      font-family: var(--font-display);
+      letter-spacing: -0.01em;
+      margin: 0;
+    }
+
+    a { color: inherit; }
+
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 var(--sp-5);
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────── */
+    .landing-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: var(--sp-5);
+    }
+
+    .brand-wordmark {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.3rem;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-suffix { color: var(--interactive); }
+
+    .header-signin-link {
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--ink-muted);
+      padding: var(--sp-2) var(--sp-4);
+      border-radius: var(--radius-sm);
+      transition: color var(--transition), background var(--transition);
+    }
+
+    .header-signin-link:hover {
+      color: var(--ink);
+      background: var(--bg-hover);
+    }
+
+    /* ── Shared section rhythm ────────────────────────────────────────── */
+    section {
+      padding: 4rem 0;
+    }
+
+    section h2 {
+      font-size: 1.6rem;
+      margin-bottom: var(--sp-3);
+    }
+
+    /* A small Hot/Warm/Cold dot trio - a quiet nod to the temperature
+       system between sections, echoing the product's own scoring without
+       turning into a literal screenshot. Purely decorative - aria-hidden. */
+    .temp-divider {
+      display: flex;
+      justify-content: center;
+      gap: var(--sp-2);
+    }
+
+    .temp-divider span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+    }
+
+    .temp-divider .cold { background: var(--cold-ink); }
+    .temp-divider .warm { background: var(--warm-ink); }
+    .temp-divider .hot { background: var(--hot-ink); }
+
+    /* ── Hero ─────────────────────────────────────────────────────────── */
+    .hero {
+      padding-top: 2.5rem;
+    }
+
+    .hero .wrap {
+      display: flex;
+      align-items: center;
+      gap: 3.5rem;
+    }
+
+    .hero-copy { flex: 1 1 420px; min-width: 0; }
+
+    .hero-copy h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      line-height: 1.1;
+      margin-bottom: var(--sp-4);
+    }
+
+    .hero-subhead {
+      font-size: 1.1rem;
+      color: var(--ink-muted);
+      max-width: 46ch;
+      margin: 0 0 var(--sp-6) 0;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+    }
+
+    .btn-primary-cta,
+    .btn-secondary-cta {
+      display: inline-block;
+      font-weight: 600;
+      font-size: 1rem;
+      text-decoration: none;
+      padding: var(--sp-3) var(--sp-6);
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      transition: background var(--transition), border-color var(--transition), color var(--transition);
+    }
+
+    /* Sage green, STRICTLY the primary action - same reservation the app
+       itself follows (Call/Save/Accept buttons). This is the demo, the
+       main route for most visitors right now. */
+    .btn-primary-cta {
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+
+    .btn-primary-cta:hover { background: var(--accent-hover); }
+
+    /* Quiet by design - sign-in is invite-only while verification
+       completes, so it deliberately doesn't compete with the demo button. */
+    .btn-secondary-cta {
+      background: transparent;
+      color: var(--ink);
+      border-color: var(--border-strong);
+    }
+
+    .btn-secondary-cta:hover {
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
+    }
+
+    .hero-visual {
+      flex: 1 1 340px;
+      min-width: 0;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* The stylised lead card - the hero's ONE illustration, standing in for
+       a screenshot. Same shape/tokens as the real lead detail panel/table,
+       just built fresh for a static, always-perfect-looking example. */
+    .lead-card-mock {
+      width: 100%;
+      max-width: 360px;
+      background: var(--bg-surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lifted);
+      padding: var(--sp-5);
+    }
+
+    .lead-card-mock-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-2);
+    }
+
+    .lead-card-mock-name {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 1.15rem;
+    }
+
+    .temp-badge {
+      font-family: var(--font-display);
+      display: inline-block;
+      padding: var(--sp-2) var(--sp-3);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .temp-hot { background: var(--hot-bg); color: var(--hot-ink); }
+
+    .lead-card-mock-phone {
+      color: var(--ink-muted);
+      font-size: 0.9rem;
+      margin: 0 0 var(--sp-4) 0;
+    }
+
+    .lead-card-mock-memory {
+      background: var(--bg-subtle);
+      border-radius: var(--radius-sm);
+      padding: var(--sp-3);
+      font-size: 0.9rem;
+      color: var(--ink);
+      margin: 0;
+    }
+
+    /* ── Problem ──────────────────────────────────────────────────────── */
+    .problem-statement {
+      font-size: 1.3rem;
+      font-family: var(--font-display);
+      max-width: 56ch;
+      margin: 0 auto var(--sp-6) auto;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .problem-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--sp-1);
+      text-align: center;
+    }
+
+    .problem-stat-number {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-ink);
+    }
+
+    .problem-stat-label {
+      color: var(--ink-muted);
+      max-width: 40ch;
+    }
+
+    /* ── Who it's for ─────────────────────────────────────────────────── */
+    .who-for { text-align: center; }
+
+    .who-for p {
+      max-width: 60ch;
+      margin: 0 auto var(--sp-5) auto;
+      color: var(--ink-muted);
+      font-size: 1.05rem;
+    }
+
+    .who-for-tags {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--sp-3);
+    }
+
+    .who-for-tag {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: var(--sp-2) var(--sp-4);
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: var(--shadow-card);
+    }
+
+    /* ── Features ─────────────────────────────────────────────────────── */
+    .features h2, .who-for h2, .problem h2 { text-align: center; }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--sp-5);
+      margin-top: var(--sp-6);
+    }
+
+    .feature {
+      background: var(--bg-surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-card);
+      padding: var(--sp-5);
+    }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      display: block;
+      margin-bottom: var(--sp-2);
+    }
+
+    .feature h3 {
+      font-size: 1.05rem;
+      margin-bottom: var(--sp-2);
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--ink-muted);
+      font-size: 0.9rem;
+    }
+
+    /* ── Closing CTA band ─────────────────────────────────────────────── */
+    .closing-cta {
+      background: var(--accent-bg);
+      border-radius: var(--radius-lg);
+      text-align: center;
+      padding: 3rem var(--sp-5);
+      margin: 0 var(--sp-5);
+    }
+
+    .closing-cta h2 { margin-bottom: var(--sp-2); }
+
+    .closing-cta p {
+      color: var(--ink-muted);
+      margin: 0 0 var(--sp-5) 0;
+    }
+
+    /* ── Footer ───────────────────────────────────────────────────────── */
+    .landing-footer {
+      text-align: center;
+      padding: var(--sp-6) var(--sp-5) 3rem var(--sp-5);
+      color: var(--ink-faint);
+      font-size: 0.85rem;
+    }
+
+    .landing-footer a {
+      color: var(--ink-muted);
+      text-decoration: underline;
+    }
+
+    /* ── Mobile ───────────────────────────────────────────────────────── */
+    @media (max-width: 760px) {
+      .hero .wrap {
+        flex-direction: column-reverse;
+        gap: var(--sp-6);
+      }
+
+      .hero-copy, .hero-visual { flex: 1 1 auto; width: 100%; }
+
+      .hero-copy { text-align: center; }
+      .hero-subhead { margin-left: auto; margin-right: auto; }
+      .hero-actions { justify-content: center; }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+
+      section { padding: 2.5rem 0; }
+    }
+
+    @media (max-width: 480px) {
+      .btn-primary-cta, .btn-secondary-cta {
+        flex: 1 1 auto;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="landing-header">
+    <span class="brand-wordmark">Rhythm<span class="brand-suffix">.ai</span></span>
+    <!-- Swapped to a direct link back into the app if this browser turns
+         out to already be signed in or in demo mode - see the script at
+         the bottom of the page. -->
+    <a href="/auth/google" id="headerSignInLink" class="header-signin-link">Sign in</a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-copy">
+          <h1>Find your rhythm. Close more.</h1>
+          <p class="hero-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
+          <div class="hero-actions">
+            <a href="/demo" class="btn-primary-cta">Try the live demo</a>
+            <a href="/auth/google" class="btn-secondary-cta">Sign in</a>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <!-- A stylised example, not a real lead - illustrates the
+               temperature score + relationship memory in one glance,
+               Rhythm's two most distinctive features. -->
+          <div class="lead-card-mock">
+            <div class="lead-card-mock-header">
+              <span class="lead-card-mock-name">Aarav Sharma</span>
+              <span class="temp-badge temp-hot">Hot (5/5)</span>
+            </div>
+            <p class="lead-card-mock-phone">+91 98765 43210</p>
+            <p class="lead-card-mock-memory">📌 Call 3: Asked about pricing - wants a demo Friday.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="temp-divider" aria-hidden="true"><span class="cold"></span><span class="warm"></span><span class="hot"></span></div>
+
+    <section class="problem">
+      <div class="wrap">
+        <p class="problem-statement">Sales calls are easy. Everything around them isn't - the dialing, the note-taking, the remembering, the following up. That's where deals get lost.</p>
+        <div class="problem-stat">
+          <span class="problem-stat-number">8–15 calls</span>
+          <span class="problem-stat-label">to close a deal - most people give up after one.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="who-for">
+      <div class="wrap">
+        <h2>Built for reps running sales off a spreadsheet</h2>
+        <p>Insurance agents. Real-estate brokers. Small-business owners. Anyone doing real sales work who can't justify an expensive CRM.</p>
+        <div class="who-for-tags">
+          <span class="who-for-tag">Insurance agents</span>
+          <span class="who-for-tag">Real-estate brokers</span>
+          <span class="who-for-tag">Small-business owners</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <div class="features-grid">
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">📞</span>
+            <h3>Dials for you</h3>
+            <p>Click a lead and Rhythm calls through the browser.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">🔄</span>
+            <h3>Power dialer</h3>
+            <p>Queue your leads and Rhythm calls through them automatically, powering past the voicemails so you only stop when someone picks up.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">📝</span>
+            <h3>Live transcription</h3>
+            <p>Every call written down, both sides, as it happens.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">💡</span>
+            <h3>Live coaching</h3>
+            <p>Real-time nudges when a lead objects or shows interest.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">✅</span>
+            <h3>Auto notes &amp; next steps</h3>
+            <p>Your notes and follow-up actions, written the moment you hang up.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">🧠</span>
+            <h3>Relationship memory</h3>
+            <p>Remembers every call, so before call seven you know where you left off on call six.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">⏰</span>
+            <h3>Call-back reminders</h3>
+            <p>Schedules your follow-ups and reminds you, so leads don't go cold.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">💬</span>
+            <h3>AI-drafted follow-up texts</h3>
+            <p>A follow-up SMS written from what was actually said on the call.</p>
+          </div>
+          <div class="feature">
+            <span class="feature-icon" aria-hidden="true">📊</span>
+            <h3>Simple analytics</h3>
+            <p>See your pick-up rate by hour and know the best time to call.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="closing-cta">
+        <h2>See it in action</h2>
+        <p>No sign-up, no sales call - just the real product, with sample data.</p>
+        <a href="/demo" class="btn-primary-cta">Try the live demo</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="landing-footer">
+    <p>Sign-in is currently limited to invited users while Google verification completes. <a href="/demo">Explore the demo</a> - it's the full product with sample data.</p>
+  </footer>
+
+  <script>
+    // If this browser is already signed in (or already in demo mode), swap
+    // the header's "Sign in" link for a direct way back into the app,
+    // instead of sending someone who already has access back through
+    // sign-in again. Purely additive - if this fails for any reason, the
+    // link just stays as "Sign in", which still works.
+    fetch("/api/me")
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.user && !data.demo) return;
+        const link = document.getElementById("headerSignInLink");
+        link.textContent = "Open Rhythm";
+        link.href = "/index.html";
+      })
+      .catch(() => {
+        // Non-critical - the link already works as a plain sign-in link.
+      });
+  </script>
+</body>
+</html>

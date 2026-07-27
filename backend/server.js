@@ -75,8 +75,21 @@ app.use(express.json());
 // calls our POST /voice endpoint during a browser call.
 app.use(express.urlencoded({ extended: false }));
 
-// Serve everything in the "frontend" folder as static files
-// (so visiting http://localhost:3000 loads frontend/index.html)
+// GET /: the public marketing landing page - served to EVERYONE, signed in
+// or not, no auth check at all (this is the public front door, now that
+// most visitors can't sign in yet - see landing.html's own "Try the demo"/
+// "Sign in" buttons). Registered BEFORE the static middleware below so it
+// takes priority over that middleware's own default "serve index.html for
+// /" behaviour - the actual app now lives at /index.html instead (see the
+// updated redirects in /auth/google/callback and /demo below, which used
+// to send people back to "/" and would otherwise land them back on this
+// marketing page instead of the app).
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "landing.html"));
+});
+
+// Serve everything in the "frontend" folder as static files (index.html,
+// callbacks.html, analytics.html, landing.html itself, css/js, etc.)
 app.use(express.static(path.join(__dirname, "..", "frontend")));
 
 // Test API endpoint the frontend button will call
@@ -121,7 +134,10 @@ app.get("/auth/google/callback", async (req, res) => {
     clearDemoCookie(res); // a real sign-in always replaces demo mode, never layers on top of it
     clearDemoActiveSheetCookie(res);
 
-    res.redirect("/"); // back to the app - now signed in
+    // Straight to the app, not "/" - that's the public landing page now,
+    // which would otherwise show a freshly signed-in user the marketing
+    // page instead of their actual leads.
+    res.redirect("/index.html");
   } catch (err) {
     console.error("Google sign-in failed:", err.message);
     res.status(500).send("Sign-in failed: " + err.message);
@@ -182,7 +198,9 @@ app.post("/api/tour/complete", async (req, res) => {
 // of those checks for exactly what's gated and why.
 app.get("/demo", (req, res) => {
   setDemoCookie(res);
-  res.redirect("/");
+  // Straight to the app, not "/" - see the same note on /auth/google/
+  // callback above. "/" is the public landing page now.
+  res.redirect("/index.html");
 });
 
 // POST /demo/exit: leaves demo mode (the "Exit demo" button).
