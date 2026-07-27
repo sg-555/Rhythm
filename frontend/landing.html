@@ -364,19 +364,70 @@
       flex: 1 1 340px;
       min-width: 0;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      align-items: center;
     }
 
-    /* The stylised lead card - the hero's ONE illustration, standing in for
-       a screenshot. Same shape/tokens as the real lead detail panel/table,
-       just built fresh for a static, always-perfect-looking example. */
-    .lead-card-mock {
+    /* Fixed-size slot - ONLY the slide content inside crossfades (see
+       .hero-slide below); this box itself never changes size, so nothing
+       in the hero ever reflows as slides cycle. Tall enough for the
+       busiest slide (the lead card, 3 lines of content + padding). */
+    .hero-carousel {
       width: 100%;
       max-width: 360px;
+    }
+
+    .hero-carousel-track {
+      position: relative;
+      height: 210px;
+    }
+
+    /* Every slide stacks in the exact same box (position: absolute, all
+       four edges pinned) and crossfades via opacity alone - nothing about
+       layout ever changes between slides, just which one is visible.
+       transition-duration is forced near-instant by the page's global
+       prefers-reduced-motion rule near the top of this file, so this
+       naturally becomes a plain swap there with no extra CSS needed. */
+    .hero-slide {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 500ms ease;
+    }
+
+    .hero-slide.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Shared card look for EVERY slide - same shape/tokens as the real
+       app's own cards, so each highlight still feels like real product UI,
+       not a marketing mockup. Centers its content vertically so shorter
+       slides (the coaching tip, the call-back note) don't look adrift in
+       the taller fixed box. */
+    .hero-slide-card {
+      height: 100%;
+      box-sizing: border-box;
       background: var(--bg-surface);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-lifted);
       padding: var(--sp-5);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    /* Small uppercase label naming the feature a non-lead-card slide is
+       illustrating (the lead card slide doesn't need one - a name + phone
+       number already reads as "a lead"). */
+    .hero-slide-eyebrow {
+      margin: 0 0 var(--sp-3) 0;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink-faint);
     }
 
     .lead-card-mock-header {
@@ -419,6 +470,85 @@
       color: var(--ink);
       margin: 0;
     }
+
+    /* Slide 2: live coaching - same warm tip-bubble treatment as the real
+       AI Coach panel's .coach-tip. */
+    .coach-tip-mock {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--sp-2);
+      padding: var(--sp-3);
+      background: var(--warm-bg);
+      border-left: 3px solid var(--warm-ink);
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      line-height: 1.4;
+      color: var(--ink);
+    }
+
+    /* Slide 3: call-back reminder - same amber "needs attention soon" tone
+       as the real call-backs indicator/due badges. */
+    .callback-mock-badge {
+      display: inline-block;
+      align-self: flex-start;
+      margin: 0 0 var(--sp-3) 0;
+      padding: var(--sp-1) var(--sp-3);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      background: var(--warm-bg);
+      color: var(--warm-ink);
+    }
+
+    .callback-mock-text {
+      margin: 0;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* Slide 4: analytics - same big-number-over-label shape as the real
+       Analytics dashboard's metric tiles. */
+    .analytics-mock-number {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-ink);
+      margin-bottom: var(--sp-1);
+    }
+
+    .analytics-mock-label {
+      display: block;
+      color: var(--ink-muted);
+      font-size: 0.95rem;
+    }
+
+    /* Dot indicators - small, but with a generously padded invisible hit
+       area (background-clip keeps the VISUAL dot small while the button's
+       full padded box stays clickable/tappable). */
+    .hero-carousel-dots {
+      display: flex;
+      justify-content: center;
+      gap: var(--sp-2);
+      margin-top: var(--sp-4);
+    }
+
+    .hero-dot {
+      width: 8px;
+      height: 8px;
+      padding: 6px;
+      background-color: var(--border-strong);
+      background-clip: content-box;
+      border: none;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background-color var(--transition);
+    }
+
+    .hero-dot:hover { background-color: var(--ink-faint); }
+
+    .hero-dot.is-active { background-color: var(--accent); }
 
     /* ── Problem ──────────────────────────────────────────────────────── */
     .problem-statement {
@@ -598,17 +728,54 @@
             <a href="/demo" class="btn-primary-cta">Try the live demo</a>
           </div>
         </div>
-        <div class="hero-visual" aria-hidden="true">
-          <!-- A stylised example, not a real lead - illustrates the
-               temperature score + relationship memory in one glance,
-               Rhythm's two most distinctive features. -->
-          <div class="lead-card-mock">
-            <div class="lead-card-mock-header">
-              <span class="lead-card-mock-name">Aarav Sharma</span>
-              <span class="temp-badge temp-hot">Hot (5/5)</span>
+        <!-- A small, self-advancing carousel of stylised product moments -
+             not real leads/calls, but built from the app's own card shapes/
+             colours so it reads as real product, not a marketing mockup.
+             See the "Hero carousel" script below for the auto-advance/
+             pause/dot-navigation behaviour. -->
+        <div class="hero-visual">
+          <div class="hero-carousel" id="heroCarousel">
+            <div class="hero-carousel-track" id="heroCarouselTrack">
+              <div class="hero-slide is-active">
+                <div class="hero-slide-card">
+                  <div class="lead-card-mock-header">
+                    <span class="lead-card-mock-name">Aarav Sharma</span>
+                    <span class="temp-badge temp-hot">Hot (5/5)</span>
+                  </div>
+                  <p class="lead-card-mock-phone">+91 98765 43210</p>
+                  <p class="lead-card-mock-memory">📌 Call 6: Raised pricing, wants an EMI option - follow up Fri.</p>
+                </div>
+              </div>
+              <div class="hero-slide" aria-hidden="true">
+                <div class="hero-slide-card">
+                  <p class="hero-slide-eyebrow">Live coaching</p>
+                  <div class="coach-tip-mock">
+                    <span aria-hidden="true">💡</span>
+                    <span>They mentioned budget - reframe around value.</span>
+                  </div>
+                </div>
+              </div>
+              <div class="hero-slide" aria-hidden="true">
+                <div class="hero-slide-card">
+                  <p class="hero-slide-eyebrow">Call-backs</p>
+                  <span class="callback-mock-badge">⏰ Due soon</span>
+                  <p class="callback-mock-text">Call back Priya - 40 min left.</p>
+                </div>
+              </div>
+              <div class="hero-slide" aria-hidden="true">
+                <div class="hero-slide-card">
+                  <p class="hero-slide-eyebrow">Analytics</p>
+                  <span class="analytics-mock-number">4–6pm</span>
+                  <span class="analytics-mock-label">is when your pick-up rate peaks.</span>
+                </div>
+              </div>
             </div>
-            <p class="lead-card-mock-phone">+91 98765 43210</p>
-            <p class="lead-card-mock-memory">📌 Call 3: Asked about pricing - wants a demo Friday.</p>
+            <div class="hero-carousel-dots" aria-label="Feature highlights">
+              <button type="button" class="hero-dot is-active" aria-label="Show highlight 1" aria-current="true"></button>
+              <button type="button" class="hero-dot" aria-label="Show highlight 2"></button>
+              <button type="button" class="hero-dot" aria-label="Show highlight 3"></button>
+              <button type="button" class="hero-dot" aria-label="Show highlight 4"></button>
+            </div>
           </div>
         </div>
       </div>
@@ -732,6 +899,82 @@
       .catch(() => {
         // Non-critical - the header just stays as a plain "Sign in" link.
       });
+  </script>
+
+  <script>
+    // ── Hero carousel ────────────────────────────────────────────────────
+    // Auto-advances through a few product-authentic highlights. The slot
+    // (.hero-carousel-track) is a fixed size - only the slide's opacity
+    // changes, so the hero never reflows as it cycles. Pauses on hover/
+    // focus so a reader isn't rushed, and respects prefers-reduced-motion
+    // by never auto-advancing at all there - just the dots, stepped
+    // through manually (the fade itself is already made near-instant by
+    // this page's global reduced-motion rule near the top of the file, so
+    // there's nothing extra to disable for that part).
+    (function () {
+      const track = document.getElementById("heroCarouselTrack");
+      if (!track) return;
+
+      const slides = Array.from(track.querySelectorAll(".hero-slide"));
+      const dots = Array.from(document.querySelectorAll(".hero-dot"));
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const ADVANCE_MS = 4500;
+
+      let currentIndex = 0;
+      let timer = null;
+
+      function showSlide(index) {
+        currentIndex = index;
+        slides.forEach((slide, i) => {
+          const isActive = i === index;
+          slide.classList.toggle("is-active", isActive);
+          slide.setAttribute("aria-hidden", isActive ? "false" : "true");
+        });
+        dots.forEach((dot, i) => {
+          const isActive = i === index;
+          dot.classList.toggle("is-active", isActive);
+          if (isActive) dot.setAttribute("aria-current", "true");
+          else dot.removeAttribute("aria-current");
+        });
+      }
+
+      function goToNext() {
+        showSlide((currentIndex + 1) % slides.length);
+      }
+
+      function stopAutoAdvance() {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      }
+
+      function startAutoAdvance() {
+        if (prefersReducedMotion) return; // manual (dots) only
+        stopAutoAdvance(); // never stack two intervals
+        timer = setInterval(goToNext, ADVANCE_MS);
+      }
+
+      dots.forEach((dot, index) => {
+        dot.addEventListener("click", () => {
+          showSlide(index);
+          // A manual jump restarts the clock fresh, rather than advancing
+          // again a moment later mid-interval.
+          startAutoAdvance();
+        });
+      });
+
+      // Pause for BOTH mouse and keyboard use - focusin/focusout cover
+      // tabbing to a dot, mouseenter/mouseleave cover hovering the card.
+      const carousel = document.getElementById("heroCarousel");
+      carousel.addEventListener("mouseenter", stopAutoAdvance);
+      carousel.addEventListener("mouseleave", startAutoAdvance);
+      carousel.addEventListener("focusin", stopAutoAdvance);
+      carousel.addEventListener("focusout", startAutoAdvance);
+
+      showSlide(0);
+      startAutoAdvance();
+    })();
   </script>
 </body>
 </html>
