@@ -200,7 +200,7 @@
     .brand-wordmark {
       font-family: var(--font-display);
       font-weight: 700;
-      font-size: 1.3rem;
+      font-size: 2rem;
       letter-spacing: -0.02em;
     }
 
@@ -214,6 +214,64 @@
       padding: var(--sp-2) var(--sp-4);
       border-radius: var(--radius-sm);
       transition: color var(--transition), background var(--transition);
+    }
+
+    /* Shown INSTEAD of .header-signin-link, only for a genuinely signed-in
+       Google account - never for a demo visitor (see the script at the
+       bottom of the page, which checks /api/me and treats demo mode as
+       NOT signed in). */
+    .header-signedin-block {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-3);
+    }
+
+    .header-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-subtle);
+      color: var(--ink-muted);
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+
+    .header-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .header-welcome {
+      color: var(--ink-muted);
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    /* Leads to the REAL app only - this whole header area never offers a
+       path into the demo, in either state (see STRICT SEPARATION note on
+       the <header> markup below). */
+    .header-open-link {
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--ink);
+      padding: var(--sp-2) var(--sp-4);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-strong);
+      white-space: nowrap;
+      transition: background var(--transition), border-color var(--transition);
+    }
+
+    .header-open-link:hover {
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
     }
 
     .header-signin-link:hover {
@@ -381,7 +439,7 @@
     .problem-statement {
       font-size: 1.3rem;
       font-family: var(--font-display);
-      max-width: 56ch;
+      max-width: 62ch;
       margin: 0 auto var(--sp-6) auto;
       text-align: center;
       line-height: 1.4;
@@ -528,10 +586,21 @@
 <body>
   <header class="landing-header">
     <span class="brand-wordmark">Rhythm<span class="brand-suffix">.ai</span></span>
-    <!-- Swapped to a direct link back into the app if this browser turns
-         out to already be signed in or in demo mode - see the script at
-         the bottom of the page. -->
-    <a href="/auth/google" id="headerSignInLink" class="header-signin-link">Sign in</a>
+
+    <!-- Exactly ONE of these two is ever visible - toggled by the script at
+         the bottom of the page, which checks /api/me. STRICT SEPARATION:
+         a demo visitor is NOT signed in, so they see plain "Sign in" here,
+         same as anyone else signed out - and this whole header area only
+         ever leads to real Google sign-in or the real app, NEVER the demo.
+         The demo has exactly one door: the "Try the live demo" button in
+         the page body below. -->
+    <a href="/auth/google" id="headerSignedOutLink" class="header-signin-link">Sign in</a>
+
+    <div id="headerSignedInBlock" class="header-signedin-block" style="display: none;">
+      <span id="headerAvatar" class="header-avatar" aria-hidden="true"></span>
+      <span class="header-welcome">Welcome back</span>
+      <a href="/index.html" class="header-open-link">Open Rhythm</a>
+    </div>
   </header>
 
   <main>
@@ -565,7 +634,7 @@
 
     <section class="problem">
       <div class="wrap">
-        <p class="problem-statement">Sales calls are easy. Everything around them isn't - the dialing, the note-taking, the remembering, the following up. That's where deals get lost.</p>
+        <p class="problem-statement">Your job is the conversation - reading the room, handling the objection, closing. But most of your day isn't that. It's dialing, taking notes, updating the sheet, and trying to remember what someone said three weeks ago. That's where deals slip away.</p>
         <div class="problem-stat">
           <span class="problem-stat-number">8–15 calls</span>
           <span class="problem-stat-label">to close a deal - most people give up after one.</span>
@@ -652,21 +721,32 @@
   </footer>
 
   <script>
-    // If this browser is already signed in (or already in demo mode), swap
-    // the header's "Sign in" link for a direct way back into the app,
-    // instead of sending someone who already has access back through
-    // sign-in again. Purely additive - if this fails for any reason, the
-    // link just stays as "Sign in", which still works.
+    // Reflects the visitor's ACTUAL state in the header - but only a real
+    // Google account counts as "signed in" here. data.demo is deliberately
+    // ignored: a demo visitor still sees plain "Sign in", since demo mode
+    // isn't an account and shouldn't look like one. Purely additive - if
+    // this fails for any reason, the header just stays as "Sign in", which
+    // still works.
     fetch("/api/me")
       .then((response) => response.json())
       .then((data) => {
-        if (!data.user && !data.demo) return;
-        const link = document.getElementById("headerSignInLink");
-        link.textContent = "Open Rhythm";
-        link.href = "/index.html";
+        if (!data.user) return;
+
+        document.getElementById("headerSignedOutLink").style.display = "none";
+        document.getElementById("headerSignedInBlock").style.display = "flex";
+
+        const avatar = document.getElementById("headerAvatar");
+        if (data.user.picture) {
+          const img = document.createElement("img");
+          img.src = data.user.picture;
+          img.alt = "";
+          avatar.appendChild(img);
+        } else {
+          avatar.textContent = (data.user.name || data.user.email || "?").charAt(0).toUpperCase();
+        }
       })
       .catch(() => {
-        // Non-critical - the link already works as a plain sign-in link.
+        // Non-critical - the header just stays as a plain "Sign in" link.
       });
   </script>
 </body>
