@@ -340,8 +340,10 @@
       gap: var(--sp-3);
     }
 
-    .btn-primary-cta,
-    .btn-secondary-cta {
+    /* The hero's only call to action now - "Sign in" lives in the header
+       alone (see landing-header/.header-signin-link), never duplicated
+       here too. */
+    .btn-primary-cta {
       display: inline-block;
       font-weight: 600;
       font-size: 1rem;
@@ -350,30 +352,13 @@
       border-radius: var(--radius-sm);
       border: 1px solid transparent;
       transition: background var(--transition), border-color var(--transition), color var(--transition);
-    }
-
-    /* Sage green, STRICTLY the primary action - same reservation the app
-       itself follows (Call/Save/Accept buttons). This is the demo, the
-       main route for most visitors right now. */
-    .btn-primary-cta {
+      /* Sage green, STRICTLY the primary action - same reservation the app
+         itself follows (Call/Save/Accept buttons). */
       background: var(--accent);
       color: var(--on-accent);
     }
 
     .btn-primary-cta:hover { background: var(--accent-hover); }
-
-    /* Quiet by design - sign-in is invite-only while verification
-       completes, so it deliberately doesn't compete with the demo button. */
-    .btn-secondary-cta {
-      background: transparent;
-      color: var(--ink);
-      border-color: var(--border-strong);
-    }
-
-    .btn-secondary-cta:hover {
-      background: var(--bg-hover);
-      border-color: var(--ink-faint);
-    }
 
     .hero-visual {
       flex: 1 1 340px;
@@ -576,7 +561,7 @@
     }
 
     @media (max-width: 480px) {
-      .btn-primary-cta, .btn-secondary-cta {
+      .btn-primary-cta {
         flex: 1 1 auto;
         text-align: center;
       }
@@ -611,7 +596,6 @@
           <p class="hero-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
           <div class="hero-actions">
             <a href="/demo" class="btn-primary-cta">Try the live demo</a>
-            <a href="/auth/google" class="btn-secondary-cta">Sign in</a>
           </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
