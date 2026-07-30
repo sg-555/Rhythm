@@ -340,10 +340,13 @@
       gap: var(--sp-3);
     }
 
-    /* The hero's only call to action now - "Sign in" lives in the header
-       alone (see landing-header/.header-signin-link), never duplicated
-       here too. */
-    .btn-primary-cta {
+    /* "Sign in" lives in the header alone (see landing-header/
+       .header-signin-link) - never duplicated in the hero or anywhere else
+       on the page. Everywhere else, it's always this SAME pair: the form
+       (primary conversion goal) and the demo (low-friction, never gated
+       behind the form). */
+    .btn-primary-cta,
+    .btn-secondary-cta {
       display: inline-block;
       font-weight: 600;
       font-size: 1rem;
@@ -352,13 +355,31 @@
       border-radius: var(--radius-sm);
       border: 1px solid transparent;
       transition: background var(--transition), border-color var(--transition), color var(--transition);
-      /* Sage green, STRICTLY the primary action - same reservation the app
-         itself follows (Call/Save/Accept buttons). */
+    }
+
+    /* PRIMARY - sage green, reserved STRICTLY for the main conversion goal
+       (get early access) - same reservation the app itself follows (Call/
+       Save/Accept buttons). */
+    .btn-primary-cta {
       background: var(--accent);
       color: var(--on-accent);
     }
 
     .btn-primary-cta:hover { background: var(--accent-hover); }
+
+    /* SECONDARY - quiet and bordered, deliberately less prominent. The
+       demo is a real, ungated option - just never the visually primary one
+       now that "Get early access" is the main goal. */
+    .btn-secondary-cta {
+      background: transparent;
+      color: var(--ink);
+      border-color: var(--border-strong);
+    }
+
+    .btn-secondary-cta:hover {
+      background: var(--bg-hover);
+      border-color: var(--ink-faint);
+    }
 
     .hero-visual {
       flex: 1 1 340px;
@@ -657,6 +678,28 @@
       margin: 0 0 var(--sp-5) 0;
     }
 
+    .closing-cta-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--sp-3);
+    }
+
+    /* ── Get early access (dedicated section) ─────────────────────────────
+       A second, more detailed conversion moment right before the footer -
+       the closing CTA band above is the quick version; this is the actual
+       "leave your details" destination. See landing.html's top-level
+       comment on why this is a link-out button, not an embedded iframe. */
+    .early-access {
+      text-align: center;
+    }
+
+    .early-access p {
+      color: var(--ink-muted);
+      max-width: 48ch;
+      margin: 0 auto var(--sp-5) auto;
+    }
+
     /* ── Footer ───────────────────────────────────────────────────────── */
     .landing-footer {
       text-align: center;
@@ -691,7 +734,7 @@
     }
 
     @media (max-width: 480px) {
-      .btn-primary-cta {
+      .btn-primary-cta, .btn-secondary-cta {
         flex: 1 1 auto;
         text-align: center;
       }
@@ -725,7 +768,8 @@
           <h1>Find your rhythm. Close more.</h1>
           <p class="hero-subhead">The dialing, the notes, and the follow-up are handled - so you can focus on the conversation.</p>
           <div class="hero-actions">
-            <a href="/demo" class="btn-primary-cta">Try the live demo</a>
+            <a href="https://forms.gle/fEfDMfEMecCynkQbA" class="btn-primary-cta" target="_blank" rel="noopener">Get early access</a>
+            <a href="/demo" class="btn-secondary-cta">Try the live demo</a>
           </div>
         </div>
         <!-- A small, self-advancing carousel of stylised product moments -
@@ -860,9 +904,28 @@
 
     <section>
       <div class="closing-cta">
-        <h2>See it in action</h2>
-        <p>No sign-up, no sales call - just the real product, with sample data.</p>
-        <a href="/demo" class="btn-primary-cta">Try the live demo</a>
+        <h2>Get early access</h2>
+        <p>See it in action first, or skip straight to setting things up.</p>
+        <div class="closing-cta-actions">
+          <a href="https://forms.gle/fEfDMfEMecCynkQbA" class="btn-primary-cta" target="_blank" rel="noopener">Get early access</a>
+          <a href="/demo" class="btn-secondary-cta">Try the live demo</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- The actual "leave your details" destination - a plain link-out
+         button rather than an embedded Google Form iframe. Google Forms
+         iframes bring their OWN fixed styling (font, colours, no dark mode
+         support at all) that can't be reached from the host page's CSS, so
+         embedding one here would sit inside this page looking like a
+         completely different product, especially in dark mode. A styled
+         button that opens the real form in a new tab keeps the page fully
+         consistent instead. -->
+    <section class="early-access">
+      <div class="wrap">
+        <h2>Ready when you are</h2>
+        <p>We're onboarding early users by invitation - leave your details and we'll set you up personally.</p>
+        <a href="https://forms.gle/fEfDMfEMecCynkQbA" class="btn-primary-cta" target="_blank" rel="noopener">Get early access</a>
       </div>
     </section>
   </main>
