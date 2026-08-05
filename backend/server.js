@@ -1193,6 +1193,15 @@ app.post("/api/leads/:phone/send-sms", async (req, res) => {
     return res.json({ success: true });
   }
 
+  // Real signed-in users only past this point - this sends a REAL text
+  // message (attacker-controlled destination + content, straight from the
+  // request) via Twilio at our cost, so it must never run for an
+  // unauthenticated caller, not just a non-demo one.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
   try {
     // req.params.phone is straight from the sheet - toE164() makes sure
     // Twilio gets a properly formatted number regardless of how it's
@@ -1206,9 +1215,11 @@ app.post("/api/leads/:phone/send-sms", async (req, res) => {
 
   // The SMS itself already went out successfully at this point - don't fail
   // the whole request just because the logging step had a problem. The rep
-  // still needs to know the text actually sent.
+  // still needs to know the text actually sent. Uses getSheetsContextForUser
+  // directly (not getSheetsContextForRequest) since we already resolved and
+  // validated `user` above - no need to look the session up a second time.
   try {
-    const { sheets, sheetId } = await getSheetsContextForRequest(req);
+    const { sheets, sheetId } = await getSheetsContextForUser(user);
     await appendSmsLogToNotes(sheets, sheetId, req.params.phone, message);
   } catch (error) {
     console.error("SMS sent, but failed to log it to Notes:", error.message);
@@ -1818,9 +1829,16 @@ app.post("/api/call", async (req, res) => {
     return res.status(403).json({ error: "Calling is disabled in demo mode." });
   }
 
+  // Real signed-in users only past this point - this places a REAL phone
+  // call, to whatever number is in the request body, at our cost. Must
+  // never run for an unauthenticated caller, not just a non-demo one.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
   try {
-    const user = await getCurrentUser(req);
-    const call = await placeCall(to, user ? user.email : null);
+    const call = await placeCall(to, user.email);
     res.json({ success: true, callSid: call.sid });
   } catch (error) {
     // Twilio errors have a helpful .message - send it back so we can see what went wrong
@@ -1837,6 +1855,14 @@ app.get("/api/test-call", async (req, res) => {
     return res.status(403).json({ error: "Calling is disabled in demo mode." });
   }
 
+  // Real signed-in users only past this point - this is a GET route, so it
+  // can be triggered just by visiting a URL (no CSRF token, nothing) - it
+  // must never place a real call for an unauthenticated caller.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+
   const to = process.env.TEST_TO_NUMBER;
 
   if (!to) {
@@ -1844,8 +1870,7 @@ app.get("/api/test-call", async (req, res) => {
   }
 
   try {
-    const user = await getCurrentUser(req);
-    const call = await placeCall(to, user ? user.email : null);
+    const call = await placeCall(to, user.email);
     res.json({ success: true, callSid: call.sid });
   } catch (error) {
     console.error("Twilio test call failed:", error.message);
@@ -2640,6 +2665,14 @@ app.post("/api/test-insights", async (req, res) => {
   // tool, not something a demo visitor should be able to trigger).
   if (isDemoRequest(req)) {
     return res.status(403).json({ error: "Not available in demo mode." });
+  }
+
+  // Real signed-in users only past this point - this calls Gemini for real,
+  // with a transcript taken directly from the request body, at our cost. It
+  // must never run for an unauthenticated caller, not just a non-demo one.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
   }
 
   const { transcript, callNumber } = req.body;
