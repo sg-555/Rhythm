@@ -591,6 +591,23 @@
     .hero-dot.is-active { background-color: var(--accent); }
 
     /* ── Problem ──────────────────────────────────────────────────────── */
+    /* Plain-language purpose statement, just below the hero - visible
+       without scrolling far. Deliberately PLAIN body text, single colour
+       throughout (including the literal "Rhythm.ai" in the sentence) -
+       unlike .brand-wordmark above, which splits "Rhythm" and ".ai" into
+       two colours. Google's OAuth verification needs the app's name to
+       read as the plain string "Rhythm.ai" somewhere on this page, and the
+       purpose of the app stated in plain language - this is that. */
+    .purpose-statement {
+      font-size: 1.05rem;
+      color: var(--ink);
+      max-width: 62ch;
+      margin: 0 auto var(--sp-6) auto;
+      text-align: center;
+      line-height: 1.6;
+      padding: 0 var(--sp-5);
+    }
+
     .problem-statement {
       font-size: 1.3rem;
       font-family: var(--font-display);
@@ -860,6 +877,8 @@
         </div>
       </div>
     </section>
+
+    <p class="purpose-statement">Rhythm.ai is an AI-powered sales-calling assistant. It helps you make and manage sales calls — transcribing and analyzing them, and storing your lead data in your own Google Sheet.</p>
 
     <div class="temp-divider" aria-hidden="true"><span class="cold"></span><span class="warm"></span><span class="hot"></span></div>
 
