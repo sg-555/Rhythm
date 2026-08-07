@@ -88,6 +88,18 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "..", "frontend", "landing.html"));
 });
 
+// GET /privacy and GET /terms: public legal pages, linked from the landing
+// page's footer - no auth check, same as "/" above. Clean URLs rather than
+// the raw "/privacy.html"/"/terms.html" static paths (those still work too,
+// via the static middleware below, but these are what's actually linked).
+app.get("/privacy", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "privacy.html"));
+});
+
+app.get("/terms", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "frontend", "terms.html"));
+});
+
 // Serve everything in the "frontend" folder as static files (index.html,
 // callbacks.html, analytics.html, landing.html itself, css/js, etc.)
 app.use(express.static(path.join(__dirname, "..", "frontend")));

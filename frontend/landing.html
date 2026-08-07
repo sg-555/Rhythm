@@ -731,6 +731,23 @@
       text-decoration: underline;
     }
 
+    /* Privacy/Terms - deliberately quieter than the line above it (smaller,
+       no underline until hover), since it's routine legal boilerplate, not
+       something worth competing for attention with the demo callout. */
+    .landing-footer-legal {
+      margin-top: var(--sp-2);
+      font-size: 0.8rem;
+    }
+
+    .landing-footer-legal a {
+      color: var(--ink-faint);
+      text-decoration: none;
+    }
+
+    .landing-footer-legal a:hover {
+      text-decoration: underline;
+    }
+
     /* ── Mobile ───────────────────────────────────────────────────────── */
     @media (max-width: 760px) {
       .hero .wrap {
@@ -950,6 +967,7 @@
 
   <footer class="landing-footer">
     <p>Sign-in is currently limited to invited users while Google verification completes. <a href="/demo">Explore the demo</a> - it's the full product with sample data.</p>
+    <p class="landing-footer-legal"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></p>
   </footer>
 
   <script>
