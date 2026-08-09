@@ -5,13 +5,20 @@
 //
 // To switch providers later (e.g. to Claude or OpenAI): write a new file
 // next to this one (e.g. claudeProvider.js) that exports the same functions
-// as geminiProvider.js - generateCallInsights(transcript, callNumber),
-// generateRelationshipSummary(previousSummary, latestTranscript, callNumber),
-// generateCoachingTip(recentTranscript, lastTip), generateFollowUpSms(
-// leadName, transcript, aiNotes), and isRetryableError(error) - then change
-// the line below to point at that file instead. The retry behavior below
-// applies automatically to whichever provider is plugged in, since it only
-// depends on that provider's own isRetryableError() function.
+// as geminiProvider.js - generateCallInsights(transcript, callNumber,
+// sellerContext), generateRelationshipSummary(previousSummary,
+// latestTranscript, callNumber, sellerContext), generateCoachingTip(
+// recentTranscript, lastTip, sellerContext), generateFollowUpSms(leadName,
+// transcript, aiNotes, sellerContext), and isRetryableError(error) - then
+// change the line below to point at that file instead. The retry behavior
+// below applies automatically to whichever provider is plugged in, since it
+// only depends on that provider's own isRetryableError() function.
+//
+// sellerContext (every function above): the calling rep's own "sells
+// X to Y, aiming for Z" profile, already assembled into one plain-English
+// string by buildSellerContextString() in server.js - or "" if they haven't
+// filled any of it in. Optional in the sense that every prompt must produce
+// IDENTICAL output to before this existed when sellerContext is "".
 
 const provider = require("./geminiProvider");
 const { withRetry } = require("./retry");
@@ -21,10 +28,10 @@ const { withRetry } = require("./retry");
 // Never throws: if every attempt fails (or the failure is permanent, like a
 // bad API key), this logs the reason and returns null, so the rest of the
 // app can carry on without the AI enrichment instead of crashing.
-async function generateCallInsights(transcript, callNumber) {
+async function generateCallInsights(transcript, callNumber, sellerContext) {
   try {
     return await withRetry(
-      () => provider.generateCallInsights(transcript, callNumber),
+      () => provider.generateCallInsights(transcript, callNumber, sellerContext),
       provider.isRetryableError,
       "AI call insights"
     );
@@ -38,10 +45,10 @@ async function generateCallInsights(transcript, callNumber) {
 // and graceful-failure behavior as generateCallInsights - returns null
 // (instead of throwing) if every attempt fails, so a provider hiccup never
 // breaks the call flow or corrupts the stored history.
-async function generateRelationshipSummary(previousSummary, latestTranscript, callNumber) {
+async function generateRelationshipSummary(previousSummary, latestTranscript, callNumber, sellerContext) {
   try {
     return await withRetry(
-      () => provider.generateRelationshipSummary(previousSummary, latestTranscript, callNumber),
+      () => provider.generateRelationshipSummary(previousSummary, latestTranscript, callNumber, sellerContext),
       provider.isRetryableError,
       "AI relationship summary"
     );
@@ -57,10 +64,10 @@ async function generateRelationshipSummary(previousSummary, latestTranscript, ca
 // (never throws) if every attempt fails, so a slow/failing AI call can never
 // disrupt the live call or its transcript - the rep just doesn't get a tip
 // that cycle, and the next periodic check tries again.
-async function generateCoachingTip(recentTranscript, lastTip) {
+async function generateCoachingTip(recentTranscript, lastTip, sellerContext) {
   try {
     return await withRetry(
-      () => provider.generateCoachingTip(recentTranscript, lastTip),
+      () => provider.generateCoachingTip(recentTranscript, lastTip, sellerContext),
       provider.isRetryableError,
       "AI coaching tip"
     );
@@ -75,10 +82,10 @@ async function generateCoachingTip(recentTranscript, lastTip) {
 // the calls above: returns null (never throws) if every attempt fails - the
 // rep can still type their own message and send that instead (see the
 // "Send follow-up SMS" section in the lead panel).
-async function generateFollowUpSms(leadName, transcript, aiNotes) {
+async function generateFollowUpSms(leadName, transcript, aiNotes, sellerContext) {
   try {
     return await withRetry(
-      () => provider.generateFollowUpSms(leadName, transcript, aiNotes),
+      () => provider.generateFollowUpSms(leadName, transcript, aiNotes, sellerContext),
       provider.isRetryableError,
       "AI SMS draft"
     );

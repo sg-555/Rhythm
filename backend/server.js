@@ -40,6 +40,7 @@ const {
   getUser,
   getCurrentUser,
   updateUserCompany,
+  updateUserSellerContext,
   updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,
@@ -64,6 +65,25 @@ const {
   clearDemoActiveSheetCookie,
 } = require("./demo");
 const db = require("./db");
+const { canUsePaidFeatures, getPilotBlockedMessage } = require("./pilotAccess");
+
+// ── Last-resort process-level safety nets ────────────────────────────────
+// Without these, ANY unhandled promise rejection or thrown error ANYWHERE
+// in this file (including deep inside a WebSocket callback or a library
+// we don't control) crashes the entire Node process by default - taking
+// down every signed-in rep's in-progress call at once, not just whatever
+// triggered it. These are a BACKSTOP, not a substitute for handling errors
+// at the source (see the try/catch around the /media-stream message
+// handler below, which is what should actually catch the known case) -
+// this just guarantees that even an error nobody anticipated logs and the
+// server keeps running, instead of silently taking everyone down.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection (server staying up):", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception (server staying up):", error);
+});
 
 const app = express();
 const PORT = 3000;
@@ -180,9 +200,20 @@ app.get("/api/me", async (req, res) => {
           // see checkSignedIn() in the frontend, which auto-starts the tour
           // only when this is false (a genuinely first login).
           tourCompleted: !!user.tourCompleted,
+          // PILOT gate (see pilotAccess.js) - false means this is a
+          // genuinely signed-in user who just isn't on the pilot allowlist.
+          // The frontend shows a full-screen "invite-only" message instead
+          // of the app for this case (see checkSignedIn()) - but that's
+          // just UX. The REAL enforcement is server-side, on every paid
+          // endpoint itself (see blockIfNoPaidAccess() above).
+          paidAccess: canUsePaidFeatures(user.email),
         }
       : null,
     demo: isDemoRequest(req),
+    // Same wording the backend's own 403s use (see getPilotBlockedMessage())
+    // - sent unconditionally (cheap, and harmless for anyone approved or
+    // signed out) so the frontend never has to hardcode this copy itself.
+    pilotBlockedMessage: getPilotBlockedMessage(),
   });
 });
 
@@ -325,6 +356,16 @@ app.get("/api/profile", async (req, res) => {
       sheetId: user.sheetId || null,
       // "light"/"dark", or null to mean "follow system preference".
       theme: user.theme || null,
+      // The 5-question "seller context" profile (see POST /api/profile and
+      // buildSellerContextString() above) - every field "" until filled in.
+      // Nested so the frontend can spread it straight onto its 5 inputs.
+      sellerContext: {
+        sellsWhat: user.sellsWhat || "",
+        sellsTo: user.sellsTo || "",
+        callGoal: user.callGoal || "",
+        commonObjections: user.commonObjections || "",
+        extraContext: user.extraContext || "",
+      },
       stats: {
         totalCalls: analytics.totalCalls,
         connectedCount: analytics.connectedCount,
@@ -338,22 +379,30 @@ app.get("/api/profile", async (req, res) => {
   }
 });
 
-// POST /api/profile: updates the signed-in user's company/organisation
-// and/or theme preference - the editable fields in the profile panel.
-// Expects { "company": "..." } and/or { "theme": "light"|"dark"|null }.
+// POST /api/profile: updates the signed-in user's company/organisation,
+// theme preference, and/or seller-context profile - the editable fields in
+// the profile panel. Expects any of: { "company": "..." },
+// { "theme": "light"|"dark"|null }, and/or the 5 seller-context fields
+// (sellsWhat/sellsTo/callGoal/commonObjections/extraContext) - all optional
+// free text, saved together whenever the "Your sales context" section is
+// submitted (see updateUserSellerContext() in auth.js).
 app.post("/api/profile", async (req, res) => {
   const user = await getCurrentUser(req);
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
 
-  const { company, theme } = req.body;
-  if (company === undefined && theme === undefined) {
-    return res.status(400).json({ error: "Request body must include 'company' or 'theme'." });
+  const { company, theme, sellsWhat, sellsTo, callGoal, commonObjections, extraContext } = req.body;
+  const sellerContextFields = { sellsWhat, sellsTo, callGoal, commonObjections, extraContext };
+  const sellerContextProvided = Object.values(sellerContextFields).some((value) => value !== undefined);
+
+  if (company === undefined && theme === undefined && !sellerContextProvided) {
+    return res.status(400).json({ error: "Request body must include 'company', 'theme', or a seller-context field." });
   }
 
   if (company !== undefined) await updateUserCompany(user.email, company);
   if (theme !== undefined) await updateUserTheme(user.email, theme);
+  if (sellerContextProvided) await updateUserSellerContext(user.email, sellerContextFields);
 
   res.json({ success: true, company, theme });
 });
@@ -829,11 +878,20 @@ app.get("/api/leads", async (req, res) => {
 
     const loaded = await loadSheetRows(sheets, sheetId);
     const headers = loaded.headers;
+
+    // Real sheet row number for each row (matching findLeadRow()'s own +2
+    // offset), computed BEFORE any demo partitioning below so it stays
+    // meaningful - see RowNumber on the returned lead object, which the
+    // frontend uses to unambiguously target ONE specific row when two
+    // leads share a phone number (the "which lead?" picker - see
+    // attachCallHandlers() in shared-lead-panel.js). Demo mode never
+    // writes anywhere real (every demo call/write is faked), so RowNumber
+    // is left null there instead of sending a partitioned, misleading index.
+    const demoMode = isDemoRequest(req);
+    const rowsWithNumbers = loaded.dataRows.map((row, index) => ({ row, rowNumber: index + 2 }));
     // Demo mode: only show the rows belonging to whichever of the three
     // fake demo sheets is currently active - see partitionDemoRows() above.
-    const dataRows = isDemoRequest(req)
-      ? partitionDemoRows(loaded.dataRows, getDemoActiveSheetId(req))
-      : loaded.dataRows;
+    const dataRows = demoMode ? partitionDemoRows(rowsWithNumbers, getDemoActiveSheetId(req)) : rowsWithNumbers;
 
     // Look up each column's position by header name, using SHEET_CONFIG.
     const nameCol = getColumnIndex(headers, "name");
@@ -849,7 +907,7 @@ app.get("/api/leads", async (req, res) => {
     // We also skip fully-blank rows (e.g. leftover empty rows at the bottom
     // of the sheet), since those aren't real leads.
     const leads = dataRows
-      .map((row) => {
+      .map(({ row, rowNumber }) => {
         const temperatureValue = parseTemperatureValue(row[temperatureCol]);
 
         // Include whether this lead is due for a call-back, so the table can
@@ -875,6 +933,9 @@ app.get("/api/leads", async (req, res) => {
           // pop-in reminder toasts, so it doesn't need a separate request
           // per lead just to check "is a reminder coming up?".
           CallBackOn: row[callBackOnCol] || "",
+          // See the comment above dataRows - only meaningful for a real
+          // signed-in user's own sheet, null in demo mode.
+          RowNumber: demoMode ? null : rowNumber,
         };
       })
       .filter((lead) => lead.Name || lead.Phone);
@@ -896,10 +957,14 @@ app.get("/api/leads/due", async (req, res) => {
     const loaded = await loadSheetRows(sheets, sheetId);
     const headers = loaded.headers;
     // Demo mode: same partitioning as GET /api/leads, so the due-for-
-    // callback list matches whichever demo sheet is currently active.
-    const dataRows = isDemoRequest(req)
-      ? partitionDemoRows(loaded.dataRows, getDemoActiveSheetId(req))
-      : loaded.dataRows;
+    // callback list matches whichever demo sheet is currently active. Row
+    // numbers are computed BEFORE partitioning (same reason as GET
+    // /api/leads: partitioning reshuffles/subsets rows, so their real sheet
+    // position has to be captured first) - demo mode never has a real one
+    // anyway (there's no real sheet row to point at), same as GET /api/leads.
+    const demoMode = isDemoRequest(req);
+    const rowsWithNumbers = loaded.dataRows.map((row, index) => ({ row, rowNumber: index + 2 }));
+    const dataRows = demoMode ? partitionDemoRows(rowsWithNumbers, getDemoActiveSheetId(req)) : rowsWithNumbers;
 
     const nameCol = getColumnIndex(headers, "name");
     const phoneCol = getColumnIndex(headers, "phone");
@@ -910,7 +975,7 @@ app.get("/api/leads/due", async (req, res) => {
 
     const dueLeads = [];
 
-    for (const row of dataRows) {
+    for (const { row, rowNumber } of dataRows) {
       const name = row[nameCol] || "";
       const phone = row[phoneCol] || "";
       if (!name && !phone) continue; // skip blank rows
@@ -930,6 +995,10 @@ app.get("/api/leads/due", async (req, res) => {
           temperatureValue,
           reason: due.reason,
           overdueDays: due.overdueDays,
+          // Lets the frontend open this exact row's detail panel without
+          // re-deriving it from the phone number later - see GET
+          // /api/leads/:phone's ?rowNumber= param.
+          rowNumber: demoMode ? null : rowNumber,
         });
       }
     }
@@ -946,16 +1015,23 @@ app.get("/api/leads/due", async (req, res) => {
 // lead (used by the frontend's lead detail side panel). Looping over
 // SHEET_CONFIG.columns like this - instead of listing field names by hand -
 // means this endpoint never needs updating if a column is added later.
+//
+// Optional ?rowNumber= query param: the specific sheet row the CALLER
+// already resolved this phone number to (e.g. the exact row the rep clicked
+// in the table) - see findLeadRow()'s preferredRowNumber. This is what lets
+// the panel open the RIGHT lead even when two leads share a phone number,
+// instead of hitting the ambiguous-refuse fallback below. Omit it (any path
+// with no row context - a bare phone-number deep link, etc.) and this falls
+// back to the same refuse-and-flag behaviour as every other read/write here.
 app.get("/api/leads/:phone", async (req, res) => {
   try {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
-    const lead = await findLeadRow(sheets, req.params.phone, sheetId);
-    if (!lead) {
-      return res.status(404).json({ error: "Lead not found." });
-    }
+    const preferredRowNumber = req.query.rowNumber ? parseInt(req.query.rowNumber, 10) : undefined;
+    const lead = await findLeadRow(sheets, req.params.phone, sheetId, preferredRowNumber);
+    if (respondIfLeadUnresolved(res, lead)) return;
 
-    const { headers, row } = lead;
+    const { headers, row, rowNumber } = lead;
 
     const details = {};
     for (const fieldName of Object.keys(SHEET_CONFIG.columns)) {
@@ -969,6 +1045,10 @@ app.get("/api/leads/:phone", async (req, res) => {
     // it back out here instead of making the frontend re-implement that.
     details.temperatureValue = parseTemperatureValue(details.temperature);
     details.aiNotesParsed = parseAiNotesBlock(details.aiNotes);
+    // The row this actually resolved to - not necessarily rowNumber above's
+    // preferredRowNumber verbatim (findLeadRow re-validates it before
+    // trusting it, and demo mode never has a real row number at all).
+    details.rowNumber = isDemoRequest(req) ? null : rowNumber;
 
     res.json(details);
   } catch (error) {
@@ -997,9 +1077,7 @@ app.post("/api/leads/:phone/stage", async (req, res) => {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
     const lead = await findLeadRow(sheets, req.params.phone, sheetId);
-    if (!lead) {
-      return res.status(404).json({ error: "Lead not found." });
-    }
+    if (respondIfLeadUnresolved(res, lead)) return;
 
     const { headers, rowNumber } = lead;
     const stageCol = getColumnIndex(headers, "stage");
@@ -1035,9 +1113,7 @@ app.post("/api/leads/:phone/notes", async (req, res) => {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
     const lead = await findLeadRow(sheets, req.params.phone, sheetId);
-    if (!lead) {
-      return res.status(404).json({ error: "Lead not found." });
-    }
+    if (respondIfLeadUnresolved(res, lead)) return;
 
     const { headers, rowNumber } = lead;
     const notesCol = getColumnIndex(headers, "notes");
@@ -1078,9 +1154,7 @@ app.post("/api/leads/:phone/callback", async (req, res) => {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
 
     const lead = await findLeadRow(sheets, req.params.phone, sheetId);
-    if (!lead) {
-      return res.status(404).json({ error: "Lead not found." });
-    }
+    if (respondIfLeadUnresolved(res, lead)) return;
 
     const { headers, rowNumber } = lead;
     const callBackOnCol = getColumnIndex(headers, "callBackOn");
@@ -1118,8 +1192,11 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
     try {
       const { sheets, sheetId } = await getSheetsContextForRequest(req);
       const lead = await findLeadRow(sheets, req.params.phone, sheetId);
-      const nameCol = lead ? getColumnIndex(lead.headers, "name") : -1;
-      const leadName = lead ? lead.row[nameCol] || "there" : "there";
+      // Ambiguous is treated the same as not-found here - no real name to
+      // draft with either way, so just fall back to the generic "there".
+      const usableLead = lead && !lead.ambiguous ? lead : null;
+      const nameCol = usableLead ? getColumnIndex(usableLead.headers, "name") : -1;
+      const leadName = usableLead ? usableLead.row[nameCol] || "there" : "there";
       return res.json({
         draft: `Hi ${leadName}, great speaking with you today! I'll send over the details we discussed - let me know if any questions come up before then.`,
       });
@@ -1127,6 +1204,17 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
       return res.json({ draft: "Hi, great speaking with you today! I'll send over the details we discussed - let me know if any questions come up." });
     }
   }
+
+  // Real signed-in users only past this point - this calls Gemini for real,
+  // at our cost, so it must never run for an unauthenticated or non-
+  // approved caller. Checked up front, before even looking for a
+  // transcript, so an unapproved user gets the same clear pilot-blocked
+  // reason every other paid endpoint gives, not a confusing 404.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+  if (blockIfNoPaidAccess(res, user.email)) return;
 
   const normalizedPhone = normalizePhoneNumber(req.params.phone);
   const transcriptLines = callTranscripts.get(normalizedPhone);
@@ -1140,10 +1228,7 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
   try {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
     const lead = await findLeadRow(sheets, req.params.phone, sheetId);
-
-    if (!lead) {
-      return res.status(404).json({ error: "Lead not found." });
-    }
+    if (respondIfLeadUnresolved(res, lead)) return;
 
     const nameCol = getColumnIndex(lead.headers, "name");
     const aiNotesCol = getColumnIndex(lead.headers, "aiNotes");
@@ -1151,7 +1236,8 @@ app.post("/api/leads/:phone/draft-sms", async (req, res) => {
     const aiNotes = lead.row[aiNotesCol] || "";
 
     const transcriptText = transcriptLinesToText(transcriptLines);
-    const draft = await generateFollowUpSms(leadName, transcriptText, aiNotes);
+    const sellerContext = buildSellerContextString(user);
+    const draft = await generateFollowUpSms(leadName, transcriptText, aiNotes, sellerContext);
 
     if (!draft) {
       // AI failed even after retries (e.g. rate-limited/quota) - the rep can
@@ -1173,6 +1259,11 @@ async function appendSmsLogToNotes(sheets, sheetId, phone, message) {
   const lead = await findLeadRow(sheets, phone, sheetId);
   if (!lead) {
     console.error("No lead found in the sheet to log the sent SMS against, phone:", phone);
+    return;
+  }
+  if (lead.ambiguous) {
+    console.error("Multiple leads share this phone number - can't log the sent SMS unambiguously, phone:", phone);
+    await flagAmbiguousPhoneRows(sheets, sheetId, lead.matchedRowNumbers, lead.headers);
     return;
   }
 
@@ -1213,13 +1304,21 @@ app.post("/api/leads/:phone/send-sms", async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
+  if (blockIfNoPaidAccess(res, user.email)) return;
+
+  // req.params.phone is straight from the sheet - toE164() makes sure
+  // Twilio gets a properly formatted number regardless of how it's stored
+  // (see the comment on toE164() above for why the sheet itself never
+  // needs a leading "+"). null means it couldn't make sense of this one -
+  // surface the same clear reason /voice gives for calls, instead of
+  // handing Twilio a malformed number and getting back an opaque error.
+  const smsTarget = toE164(req.params.phone);
+  if (!smsTarget) {
+    return res.status(400).json({ error: UNRECOGNIZED_PHONE_MESSAGE });
+  }
 
   try {
-    // req.params.phone is straight from the sheet - toE164() makes sure
-    // Twilio gets a properly formatted number regardless of how it's
-    // stored (see the comment on toE164() above for why the sheet itself
-    // never needs a leading "+").
-    await sendSms(toE164(req.params.phone), message);
+    await sendSms(smsTarget, message);
   } catch (error) {
     console.error("Failed to send SMS:", error.message);
     return res.status(500).json({ error: "Failed to send SMS: " + error.message });
@@ -1336,37 +1435,114 @@ function normalizePhoneNumber(phone) {
 }
 
 // Turns a lead's phone number - straight from the sheet, in WHATEVER format
-// it's stored in ("91 98765 43210", "+91 98765 43210", "919876543210", ...)
-// - into the E.164 format ("+919876543210") Twilio actually requires to
-// dial or text it correctly. The sheet itself deliberately never NEEDS a
-// leading "+" (that's what triggers Sheets' formula-parsing bug - see the
-// onboarding empty state's guidance), so this is the one place that adds it
-// back, right before the number is ever handed to Twilio.
+// it's stored in ("91 98765 43210", "+91 98765 43210", "919876543210",
+// "9876543210", "09876543210", ...) - into the E.164 format
+// ("+919876543210") Twilio actually requires to dial or text it correctly.
+// The sheet itself deliberately never NEEDS a leading "+" (that's what
+// triggers Sheets' formula-parsing bug - see the onboarding empty state's
+// guidance), so this is the one place that adds it back, right before the
+// number is ever handed to Twilio.
+//
+// INDIA-ONLY for this pilot: reps type Indian numbers in a handful of
+// predictable shapes, and this fills in the +91 country code by GUESSING
+// from digit count alone - a bare 10-digit number is assumed to be an
+// Indian mobile because that's overwhelmingly the common case for this
+// pilot, not because it's actually knowable from the digits themselves. If
+// this app ever needs to support non-Indian leads, this whole function
+// needs revisiting (10 digits stops being a safe "must be Indian" signal
+// the moment a US/UK/etc number can show up in the same sheet).
+//
+// Returns null if the digits don't match any recognized shape, INSTEAD of
+// guessing or returning a malformed number - every caller must check for
+// null and surface a clear reason to the rep rather than silently handing
+// Twilio something it will just reject (see /voice and
+// POST /api/leads/:phone/send-sms for how each does that).
 function toE164(phone) {
-  return "+" + normalizePhoneNumber(phone);
+  const digits = normalizePhoneNumber(phone);
+
+  if (digits.length === 10) {
+    // Bare 10-digit number, no country code - by far the most common shape
+    // reps will type. Assume Indian mobile.
+    return "+91" + digits;
+  }
+
+  if (digits.length === 11 && digits.startsWith("0")) {
+    // Domestic trunk-prefix format (e.g. "09876543210") - the leading 0
+    // isn't part of the number itself, it's dropped, then the country code
+    // takes its place.
+    return "+91" + digits.slice(1);
+  }
+
+  if (digits.length === 12 && digits.startsWith("91")) {
+    // Already has the country code - whether it was typed as "91..." or
+    // "+91..." (normalizePhoneNumber above already stripped any "+"), this
+    // is the same 12-digit shape either way. Used as-is - NOT prepending a
+    // second "91" on top of it.
+    return "+" + digits;
+  }
+
+  // Wrong length, or a shape we don't recognize (a non-Indian number, a
+  // typo, garbage data) - don't guess.
+  return null;
 }
 
-// Finds a lead's row by phone number. Returns null if no row matches, or
-// { headers, row, rowNumber } if found. Both updateLeadAfterCall and the AI
-// insights writer below need this, so the "find by phone" logic lives here
-// in one place instead of being copied twice.
+// Shown to the rep when a lead's phone number isn't blank, but toE164()
+// couldn't make sense of it - a wrong digit count, or a shape it doesn't
+// recognize. Deliberately explains WHAT to check instead of just saying
+// "invalid" - see toE164()'s own comment for exactly which shapes it
+// accepts today. Shared by /voice (calls) and POST /api/leads/:phone/send-
+// sms (follow-up texts) - the same gap in toE164() affects both.
+const UNRECOGNIZED_PHONE_MESSAGE =
+  "This number doesn't look right - check it's a 10-digit Indian mobile or includes a full country code.";
+
+// Finds a lead's row by phone number. Returns:
+//   - null                                     if no row matches
+//   - { headers, row, rowNumber }               if exactly one row matches
+//     (or preferredRowNumber resolved directly - see below)
+//   - { ambiguous: true, matchedRowNumbers, headers }   if 2+ rows share
+//     this phone number and we don't already know which one is meant -
+//     every caller MUST check for `.ambiguous` before using `.row`/
+//     `.rowNumber`, which won't exist on this shape. See each call site
+//     for how it responds - the ones on the manual call path resolve this
+//     BEFORE it ever gets here (see preferredRowNumber below); everywhere
+//     else (notes/stage/callback/SMS/regenerate-insights - "background"
+//     actions with no picker involved) treats it as "can't safely act,
+//     tell the rep to make phone numbers unique" instead of guessing.
 //
-// TEMPORARY DIAGNOSTIC LOGGING: there's a bug where calls sometimes update
-// the wrong lead's row. This logs every step of the matching process (the
-// incoming number, every row it compares against, and which one it picks
-// and why) so we can see exactly what's happening on a real call before
-// changing any matching logic.
-async function findLeadRow(sheets, phone, sheetId) {
+// preferredRowNumber (optional): when the caller ALREADY knows exactly
+// which row this is for - the rep picked a specific lead from the "which
+// lead?" duplicate-phone picker, or there was only ever one match when the
+// call started (see startRealCall() in shared-lead-panel.js and
+// /call-status below, which is what actually passes this through) - we use
+// that row DIRECTLY instead of re-scanning the whole sheet by phone. This
+// is what makes the picker's choice unambiguous even though OTHER rows
+// still share that same phone number. Still RE-VALIDATED against the
+// current sheet (not blindly trusted) in case the row was edited/deleted
+// out from under us since the call started - if its phone no longer
+// matches, we fall through to the normal full search below rather than
+// silently writing to a row that's no longer the right one.
+async function findLeadRow(sheets, phone, sheetId, preferredRowNumber) {
   const { headers, dataRows } = await loadSheetRows(sheets, sheetId);
   const phoneCol = getColumnIndex(headers, "phone");
   const nameCol = getColumnIndex(headers, "name");
   const targetPhone = normalizePhoneNumber(phone);
 
   console.log(
-    `[findLeadRow] Looking for phone raw="${phone}" normalized="${targetPhone}"`
+    `[findLeadRow] Looking for phone raw="${phone}" normalized="${targetPhone}"` +
+      (preferredRowNumber ? ` (preferred row ${preferredRowNumber})` : "")
   );
 
-  let matchedIndex = -1;
+  if (preferredRowNumber) {
+    const preferredRow = dataRows[preferredRowNumber - 2];
+    if (preferredRow && normalizePhoneNumber(preferredRow[phoneCol]) === targetPhone) {
+      console.log(`[findLeadRow] Preferred row ${preferredRowNumber} still matches - using it directly, no full search needed.`);
+      return { headers, row: preferredRow, rowNumber: preferredRowNumber };
+    }
+    console.log(`[findLeadRow] Preferred row ${preferredRowNumber} no longer matches this phone - falling back to a full search.`);
+  }
+
+  const matchedRowNumbers = [];
+  let firstMatchIndex = -1;
 
   for (let i = 0; i < dataRows.length; i++) {
     const row = dataRows[i];
@@ -1379,29 +1555,96 @@ async function findLeadRow(sheets, phone, sheetId) {
         `phone raw="${rawRowPhone}" normalized="${normalizedRowPhone}" -> ${isMatch ? "MATCH" : "no match"}`
     );
 
-    if (isMatch && matchedIndex === -1) {
-      matchedIndex = i;
-      // Not stopping the loop early on purpose - we want to see every row's
-      // comparison in the log, including any OTHER rows that also match.
+    if (isMatch) {
+      matchedRowNumbers.push(i + 2);
+      if (firstMatchIndex === -1) firstMatchIndex = i;
     }
   }
 
-  if (matchedIndex === -1) {
+  if (matchedRowNumbers.length === 0) {
     console.log(`[findLeadRow] No row matched phone "${targetPhone}" - returning null.`);
     return null;
   }
 
-  const matchedRow = dataRows[matchedIndex];
+  if (matchedRowNumbers.length > 1) {
+    console.log(
+      `[findLeadRow] AMBIGUOUS: ${matchedRowNumbers.length} rows share phone "${targetPhone}" - rows ${matchedRowNumbers.join(", ")}. Refusing to guess.`
+    );
+    return { ambiguous: true, matchedRowNumbers, headers };
+  }
+
+  const matchedRow = dataRows[firstMatchIndex];
   console.log(
-    `[findLeadRow] Decided on row ${matchedIndex} (sheet row ${matchedIndex + 2}): ` +
-      `name="${matchedRow[nameCol]}" phone="${matchedRow[phoneCol]}" (first row whose normalized phone matched)`
+    `[findLeadRow] Decided on row ${firstMatchIndex} (sheet row ${firstMatchIndex + 2}): ` +
+      `name="${matchedRow[nameCol]}" phone="${matchedRow[phoneCol]}" (the only match)`
   );
 
   return {
     headers,
     row: matchedRow,
-    rowNumber: matchedIndex + 2, // +1 for the header row, +1 to be 1-indexed
+    rowNumber: firstMatchIndex + 2, // +1 for the header row, +1 to be 1-indexed
   };
+}
+
+// Shared by every plain REST route below that reads/writes ONE lead by
+// phone with no picker context involved (notes, stage, callback time,
+// draft-sms, opening the detail panel) - these aren't part of the call
+// flow itself, so there's no resolved row number to fall back on the way
+// /call-status has. Sends the appropriate error response for findLeadRow()
+// returning null (not found) or `.ambiguous` (multiple leads share this
+// phone number), and returns true - the caller should just `return` right
+// after. Returns false if `lead` is a normal, usable result.
+function respondIfLeadUnresolved(res, lead) {
+  if (!lead) {
+    res.status(404).json({ error: "Lead not found." });
+    return true;
+  }
+  if (lead.ambiguous) {
+    res.status(409).json({
+      error: "Multiple leads share this phone number, so this can't be uniquely identified. Open your sheet and make phone numbers unique.",
+    });
+    return true;
+  }
+  return false;
+}
+
+// PILOT gate (see pilotAccess.js - temporary, until this app has a real
+// paywall/rate-limiting model). Shared by every endpoint below that spends
+// real money (Twilio, Deepgram, Gemini) - call this ONLY after already
+// confirming `email` belongs to a genuinely signed-in user (demo mode never
+// reaches these endpoints at all - see each call site's own demo check).
+// Same shape as respondIfLeadUnresolved above: sends the 403 itself and
+// returns true, so callers just `if (blockIfNoPaidAccess(res, user.email)) return;`.
+function blockIfNoPaidAccess(res, email) {
+  if (canUsePaidFeatures(email)) return false;
+  res.status(403).json({ error: getPilotBlockedMessage() });
+  return true;
+}
+
+// Writes a plain, visible warning into every row that shares an ambiguous
+// phone number - the rep needs to see this on THEIR OWN sheet, not just in
+// a server log they'll never check. Reuses the AI Notes cell (same spot
+// writeAiInsightsFailurePlaceholder() uses for a failed AI attempt) since
+// that's the one place a rep already looks for "why don't I have notes for
+// this call" - but deliberately leaves Temperature untouched (unlike that
+// placeholder), so we're never destroying a real temperature a PREVIOUS,
+// unambiguous call already set, just because a later call couldn't be
+// resolved.
+async function flagAmbiguousPhoneRows(sheets, sheetId, matchedRowNumbers, headers) {
+  const aiNotesCol = getColumnIndex(headers, "aiNotes");
+  const warningText =
+    "⚠️ Multiple leads share this phone number — this call's notes/outcome weren't auto-recorded. Open your sheet and make phone numbers unique to fix.";
+
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: sheetId,
+    requestBody: {
+      valueInputOption: "USER_ENTERED",
+      data: matchedRowNumbers.map((rowNumber) => ({
+        range: `${columnIndexToLetter(aiNotesCol)}${rowNumber}`,
+        values: [[warningText]],
+      })),
+    },
+  });
 }
 
 // After a call finishes, updates that lead's row:
@@ -1411,12 +1654,40 @@ async function findLeadRow(sheets, phone, sheetId) {
 // - First Connected is only ever set ONCE, the first time outcome is
 //   "Connected" - it is never overwritten after that.
 // - Stage and Notes are never touched.
-// Returns the new Attempts count (used as the "call number" for AI insights),
-// or null if no matching lead was found.
-async function updateLeadAfterCall(sheets, sheetId, phone, outcome) {
-  const lead = await findLeadRow(sheets, phone, sheetId);
+//
+// preferredRowNumber (optional): the rep already resolved which lead this
+// call was for - via the "which lead?" duplicate-phone picker, or there
+// was only ever one match to begin with - see /call-status below, which
+// threads leadRowNumber through to here. Passed straight to findLeadRow().
+//
+// Returns { callNumber, rowNumber } (rowNumber gets threaded on to the AI-
+// insights-writing step right after this, so it operates on the EXACT SAME
+// row - never re-derives independently and can never diverge from this
+// write). Returns null if the lead couldn't be resolved at all: either not
+// found, OR still ambiguous even after checking preferredRowNumber and a
+// full fallback search - in the ambiguous case, a plain warning is written
+// into every colliding row instead of guessing (see flagAmbiguousPhoneRows
+// above), and the REST of this call's sheet-writing (AI insights,
+// relationship history) is skipped entirely by the caller, since returning
+// null here is the exact same signal /call-status already treats as
+// "nothing to do next" for the plain not-found case.
+async function updateLeadAfterCall(sheets, sheetId, phone, outcome, preferredRowNumber) {
+  const lead = await findLeadRow(sheets, phone, sheetId, preferredRowNumber);
+
   if (!lead) {
     console.error("No lead found in the sheet for phone:", phone);
+    return null;
+  }
+
+  if (lead.ambiguous) {
+    console.error(
+      `Ambiguous phone number for ${phone} - flagging rows ${lead.matchedRowNumbers.join(", ")} instead of guessing which one this call was for.`
+    );
+    try {
+      await flagAmbiguousPhoneRows(sheets, sheetId, lead.matchedRowNumbers, lead.headers);
+    } catch (error) {
+      console.error("Failed to write the ambiguous-phone-number flag:", error.message);
+    }
     return null;
   }
 
@@ -1456,7 +1727,7 @@ async function updateLeadAfterCall(sheets, sheetId, phone, outcome) {
     },
   });
 
-  return newAttempts;
+  return { callNumber: newAttempts, rowNumber };
 }
 
 // Where we save the most recent real call's transcript, so it's easy to
@@ -1626,10 +1897,31 @@ function computeCallbackDue(temperatureValue, lastCalledText, callBackOnText, fi
 // Shared by writeAiInsightsToSheet and writeAiInsightsFailurePlaceholder
 // below: finds the lead's row and writes whatever Temperature/AI Notes
 // values it's given into it.
-async function writeAiCells(sheets, sheetId, phone, temperatureValue, notesValue) {
-  const lead = await findLeadRow(sheets, phone, sheetId);
+//
+// preferredRowNumber (optional): passed all the way down from /call-status,
+// where updateLeadAfterCall() already resolved (and validated) exactly
+// which row this call was for, moments earlier in the same request - using
+// it here means this operates on the EXACT SAME row, not a fresh, possibly-
+// different phone-based guess. Still re-validated by findLeadRow() itself
+// (not blindly trusted), in case the sheet changed during the Gemini call
+// this waits on in between. If it's ever missing/stale AND a fallback scan
+// finds the phone is (now) ambiguous, this flags every colliding row the
+// same way updateLeadAfterCall() does, rather than silently picking one.
+async function writeAiCells(sheets, sheetId, phone, temperatureValue, notesValue, preferredRowNumber) {
+  const lead = await findLeadRow(sheets, phone, sheetId, preferredRowNumber);
+
   if (!lead) {
     console.error("No lead found in the sheet for AI insights, phone:", phone);
+    return;
+  }
+
+  if (lead.ambiguous) {
+    console.error(`Ambiguous phone number for ${phone} while writing AI insights - flagging rows ${lead.matchedRowNumbers.join(", ")} instead of guessing.`);
+    try {
+      await flagAmbiguousPhoneRows(sheets, sheetId, lead.matchedRowNumbers, lead.headers);
+    } catch (error) {
+      console.error("Failed to write the ambiguous-phone-number flag:", error.message);
+    }
     return;
   }
 
@@ -1652,11 +1944,11 @@ async function writeAiCells(sheets, sheetId, phone, temperatureValue, notesValue
 // Writes the AI-generated Temperature and AI Notes for a lead.
 // Stage is deliberately NOT touched here - suggestedStage is only shown
 // inside the notes block for now, not applied automatically.
-async function writeAiInsightsToSheet(sheets, sheetId, phone, insights) {
+async function writeAiInsightsToSheet(sheets, sheetId, phone, insights, preferredRowNumber) {
   const temperatureLabel = `${insights.temperature} (${temperatureWord(insights.temperature)})`;
   const notesBlock = buildAiNotesBlock(insights);
 
-  await writeAiCells(sheets, sheetId, phone, temperatureLabel, notesBlock);
+  await writeAiCells(sheets, sheetId, phone, temperatureLabel, notesBlock, preferredRowNumber);
   console.log(`AI insights written for ${phone}: Temperature = ${temperatureLabel}`);
 }
 
@@ -1664,9 +1956,49 @@ async function writeAiInsightsToSheet(sheets, sheetId, phone, insights) {
 // Writes an obvious placeholder instead of leaving the cells looking blank
 // or stale, so it's clear this call still needs insights generated - either
 // automatically next time, or via POST /api/regenerate-insights.
-async function writeAiInsightsFailurePlaceholder(sheets, sheetId, phone) {
-  await writeAiCells(sheets, sheetId, phone, "—", "AI insights unavailable — will retry later");
+async function writeAiInsightsFailurePlaceholder(sheets, sheetId, phone, preferredRowNumber) {
+  await writeAiCells(sheets, sheetId, phone, "—", "AI insights unavailable — will retry later", preferredRowNumber);
   console.log(`AI insights failed for ${phone} - wrote placeholder to sheet`);
+}
+
+// ── Seller context (personalizing the AI prompts) ───────────────────────
+// A rep's own 5-question profile (see POST /api/profile and the profile
+// panel's "Your sales context" section) - assembled into ONE plain-English
+// string every AI prompt builder optionally takes, so Gemini can judge
+// fit/relevance instead of reasoning in a vacuum. Any blank field is simply
+// omitted; if every field is blank this returns "" (never null), and every
+// prompt builder treats "" exactly the same as not being passed a context
+// at all - so a user who never fills this in gets IDENTICAL output to
+// before this feature existed.
+//
+// Per-user only for now, deliberately - see the task this shipped with for
+// why (team/manager-inherited context is a natural next step, not needed
+// for the pilot). Nothing about this shape stops a later
+// getSellerContextForTeam(teamId) from reusing buildSellerContextString()
+// underneath it.
+function buildSellerContextString(user) {
+  if (!user) return "";
+
+  const parts = [];
+  if (user.sellsWhat) parts.push(`Sells: ${user.sellsWhat}.`);
+  if (user.sellsTo) parts.push(`Sells to: ${user.sellsTo}.`);
+  if (user.callGoal) parts.push(`Goal on calls: ${user.callGoal}.`);
+  if (user.commonObjections) parts.push(`Common objections: ${user.commonObjections}.`);
+  if (user.extraContext) parts.push(`Notes: ${user.extraContext}.`);
+
+  return parts.join(" ");
+}
+
+// Same as buildSellerContextString(), but starting from just an email - the
+// shape most non-HTTP-request call sites actually have on hand (a Twilio
+// webhook's callerEmail, a media-stream's custom parameter, ...). Returns
+// "" for a missing/unknown email, same as buildSellerContextString does for
+// a user with nothing filled in - callers never need to branch on which
+// case they hit.
+async function getSellerContextForEmail(email) {
+  if (!email) return "";
+  const user = await getUser(email);
+  return buildSellerContextString(user);
 }
 
 // Generates AI insights for one finished call and writes them to the sheet.
@@ -1674,15 +2006,20 @@ async function writeAiInsightsFailurePlaceholder(sheets, sheetId, phone) {
 // a clear placeholder rather than silently leaving the row unchanged, and
 // any sheet-writing error is caught here so it never breaks /call-status.
 // Returns the insights object (or null if it failed) - the caller uses this
-// to update the cross-call "Previous Calls" history, see below.
-async function generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber) {
-  const insights = await generateCallInsights(transcriptText, callNumber);
+// to update the cross-call "Previous Calls" history, see below. userEmail
+// is used ONLY to look up the seller-context profile (see
+// getSellerContextForEmail above) - may be null (e.g. /call-status
+// couldn't resolve who placed the call), in which case insights just come
+// out generic, same as before this feature existed.
+async function generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber, preferredRowNumber, userEmail) {
+  const sellerContext = await getSellerContextForEmail(userEmail);
+  const insights = await generateCallInsights(transcriptText, callNumber, sellerContext);
 
   try {
     if (insights) {
-      await writeAiInsightsToSheet(sheets, sheetId, phone, insights);
+      await writeAiInsightsToSheet(sheets, sheetId, phone, insights, preferredRowNumber);
     } else {
-      await writeAiInsightsFailurePlaceholder(sheets, sheetId, phone);
+      await writeAiInsightsFailurePlaceholder(sheets, sheetId, phone, preferredRowNumber);
     }
   } catch (error) {
     console.error("Failed to write AI insights to sheet:", error.message);
@@ -1755,7 +2092,10 @@ async function appendCallHistoryEntry(userEmail, phone, entry) {
 // the spec - there's no "relationship" to summarize yet.
 // Safe to call even if insights is null (the per-call AI attempt failed) -
 // there's nothing worth recording in that case, so this just does nothing.
-async function updateRelationshipHistory(userEmail, sheets, sheetId, phone, insights, transcriptText, callNumber) {
+// preferredRowNumber (optional): same as writeAiCells() above - carried
+// through from /call-status's own resolution so this operates on the exact
+// same row, not a fresh phone-based guess.
+async function updateRelationshipHistory(userEmail, sheets, sheetId, phone, insights, transcriptText, callNumber, preferredRowNumber) {
   if (!insights) return; // per-call AI attempt failed - nothing to record
 
   await appendCallHistoryEntry(userEmail, phone, {
@@ -1770,16 +2110,24 @@ async function updateRelationshipHistory(userEmail, sheets, sheetId, phone, insi
   if (callNumber <= 1) return; // first call - "Previous Calls" stays blank
 
   try {
-    const lead = await findLeadRow(sheets, phone, sheetId);
+    const lead = await findLeadRow(sheets, phone, sheetId, preferredRowNumber);
     if (!lead) {
       console.error("No lead found in the sheet for relationship summary, phone:", phone);
+      return;
+    }
+    if (lead.ambiguous) {
+      // updateLeadAfterCall() already flagged the colliding rows earlier in
+      // this same request (that's why we even have a preferredRowNumber to
+      // try) - no need to write it again, just skip this lower-stakes field.
+      console.error(`Ambiguous phone number for ${phone} while updating relationship history - skipping.`);
       return;
     }
 
     const previousCallsCol = getColumnIndex(lead.headers, "previousCalls");
     const existingSummary = lead.row[previousCallsCol] || "";
 
-    const updatedSummary = await generateRelationshipSummary(existingSummary, transcriptText, callNumber);
+    const sellerContext = await getSellerContextForEmail(userEmail);
+    const updatedSummary = await generateRelationshipSummary(existingSummary, transcriptText, callNumber, sellerContext);
     if (!updatedSummary) return; // already logged inside the AI provider
 
     await sheets.spreadsheets.values.update({
@@ -1807,8 +2155,19 @@ function buildGreetingTwiml() {
 // calls server-to-server, with no browser session) can still work out
 // WHICH signed-in user's sheet this call belongs to. See getSheetsContext-
 // ForEmail() above and the /call-status handler below.
-function withCallerEmail(url, callerEmail) {
-  return callerEmail ? `${url}?callerEmail=${encodeURIComponent(callerEmail)}` : url;
+// leadRowNumber is OPTIONAL - only /voice's browser-initiated calls have
+// one to offer (the rep picked a specific row via the "which lead?" picker,
+// or there was only ever one match - see startRealCall() in shared-lead-
+// panel.js). placeCall()'s own two callers (/api/call, /api/test-call)
+// never pass one - those aren't placed from a lead row at all, so
+// /call-status falls back to its normal phone-based lookup for them,
+// exactly as it always has.
+function withCallerEmail(url, callerEmail, leadRowNumber) {
+  const params = new URLSearchParams();
+  if (callerEmail) params.set("callerEmail", callerEmail);
+  if (leadRowNumber) params.set("leadRowNumber", leadRowNumber);
+  const query = params.toString();
+  return query ? `${url}?${query}` : url;
 }
 
 // Places a call to the given phone number and speaks the greeting when answered.
@@ -1848,6 +2207,7 @@ app.post("/api/call", async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
+  if (blockIfNoPaidAccess(res, user.email)) return;
 
   try {
     const call = await placeCall(to, user.email);
@@ -1874,6 +2234,7 @@ app.get("/api/test-call", async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
+  if (blockIfNoPaidAccess(res, user.email)) return;
 
   const to = process.env.TEST_TO_NUMBER;
 
@@ -1893,19 +2254,33 @@ app.get("/api/test-call", async (req, res) => {
 // GET /api/token: creates a short-lived access token that lets the browser
 // itself make calls through Twilio, using the "Voice SDK" (WebRTC).
 //
-// THIS IS THE MAIN GATE THAT KEEPS DEMO MODE FROM EVER COSTING MONEY: the
-// frontend's demo-mode Call button (see startDemoCall() in index.html /
-// callbacks.html) never asks for a token in the first place, and refusing
-// to hand one out here means even a demo visitor poking at devtools can't
+// THIS IS THE MAIN GATE THAT KEEPS DEMO MODE - AND ANYONE NOT APPROVED FOR
+// THE PILOT - FROM EVER COSTING MONEY: the frontend's demo-mode Call button
+// (see startDemoCall() in index.html / callbacks.html) never asks for a
+// token in the first place, and refusing to hand one out here means even a
+// demo visitor (or an unapproved signed-in user) poking at devtools can't
 // get the Twilio Voice SDK to place a real WebRTC call - without a valid
 // token, device.connect() has nothing to authenticate with, so it can never
 // reach Twilio's servers, which means /voice and /media-stream below (both
 // only ever called BY Twilio, for a call that was actually placed) are
-// never reachable in demo mode either.
-app.get("/api/token", (req, res) => {
+// never reachable either. This is why neither of those two needs its OWN
+// separate pilot-allowlist check - there's no way to reach them without a
+// token from here first.
+app.get("/api/token", async (req, res) => {
   if (isDemoRequest(req)) {
     return res.status(403).json({ error: "Calling is disabled in demo mode." });
   }
+
+  // Real signed-in, pilot-approved users only past this point. Note: before
+  // this fix, this route had NO sign-in check at all - only the demo-mode
+  // refusal above - so anyone who found this URL (signed in or not) could
+  // fetch a working Twilio Voice SDK token directly. Fixed here as part of
+  // the same pilot-gating pass.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+  if (blockIfNoPaidAccess(res, user.email)) return;
 
   try {
     const AccessToken = twilio.jwt.AccessToken;
@@ -1940,15 +2315,24 @@ app.get("/api/token", (req, res) => {
 // caller ID. validateTwilioRequest (above) rejects anything not genuinely
 // signed by Twilio before this handler ever runs.
 app.post("/voice", validateTwilioRequest, (req, res) => {
-  // Straight from the lead's sheet row, in whatever format it's stored in -
+  // Straight from the lead's sheet row, in whatever format it's stored in.
+  const rawTo = req.body.To || "";
   // toE164() below is what makes sure Twilio actually dials it correctly
-  // regardless (the sheet itself never has to store a leading "+").
-  const to = req.body.To ? toE164(req.body.To) : "";
+  // regardless of that format - null means it couldn't (see its own
+  // comment for why), handled explicitly below instead of ever handing
+  // Twilio a malformed number and letting it fail unexplained.
+  const to = rawTo ? toE164(rawTo) : "";
   // Set by the browser's device.connect({ params: { To, callerEmail } }) -
   // see attachCallHandlers() in the frontend - so /call-status below (which
   // Twilio calls with no browser session at all) can still work out WHICH
   // signed-in user's sheet this call belongs to.
   const callerEmail = req.body.callerEmail || "";
+  // Set ONLY when the rep either picked a specific lead from the "which
+  // lead?" duplicate-phone picker, or there was just the one match to
+  // begin with - see startRealCall() in shared-lead-panel.js. Empty
+  // otherwise (e.g. a call placed some other way), in which case /call-
+  // status falls back to its normal phone-based lookup.
+  const leadRowNumber = req.body.leadRowNumber || "";
   const response = new twilio.twiml.VoiceResponse();
 
   if (to) {
@@ -1965,19 +2349,41 @@ app.post("/voice", validateTwilioRequest, (req, res) => {
     // belongs to (it shows up as data.start.customParameters.leadPhone).
     stream.parameter({ name: "leadPhone", value: to });
 
+    // Same idea, for the CALLER's email - lets /media-stream look up this
+    // rep's seller-context profile (see getSellerContextForEmail() below)
+    // to personalize live coaching tips. May be empty (a call placed some
+    // other way) - getSellerContextForEmail("") just returns "" too, same
+    // as no profile filled in, so coaching simply stays generic.
+    stream.parameter({ name: "callerEmail", value: callerEmail });
+
     const dial = response.dial({ callerId: process.env.TWILIO_FROM_NUMBER });
 
     // Tells Twilio to notify our /call-status endpoint once this call
-    // finishes - with callerEmail carried through the URL itself, since
-    // Twilio's status callback request won't have our session cookie.
+    // finishes - with callerEmail (and leadRowNumber, if we have one)
+    // carried through the URL itself, since Twilio's status callback
+    // request won't have our session cookie.
     dial.number(
       {
-        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail),
+        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail, leadRowNumber),
         statusCallbackEvent: ["completed"],
         statusCallbackMethod: "POST",
       },
       to
     );
+  } else if (rawTo) {
+    // A number WAS provided, but toE164() couldn't turn it into anything
+    // dialable. Rather than let Twilio attempt a malformed number and
+    // report back a generic "Invalid number"/SIP failure that doesn't
+    // explain WHY, catch it here and tell the rep directly - the SAME way
+    // any other call outcome reaches their screen (see broadcastCallOutcome
+    // below and pendingCallOutcomeCallback in shared-lead-panel.js), using
+    // the raw, un-normalized number so it matches activeCallPhone on the
+    // frontend exactly as typed. The call is never dialed at all (no
+    // dial.number() above), so /call-status never fires for this - nothing
+    // gets logged as a real attempt, no Attempts increment, no Outcome
+    // write.
+    broadcastCallOutcome(rawTo, UNRECOGNIZED_PHONE_MESSAGE, false);
+    response.say(UNRECOGNIZED_PHONE_MESSAGE);
   } else {
     response.say("No destination number was provided.");
   }
@@ -2110,9 +2516,14 @@ async function appendCallLogEntry(entry) {
 // null if it hasn't been set yet). Used to record what the lead's
 // temperature was BEFORE this call - i.e. what we believed about them going
 // in, not what this call's own (not-yet-generated) insights might say.
-async function getLeadNameAndTemperature(sheets, sheetId, phone) {
-  const lead = await findLeadRow(sheets, phone, sheetId);
-  if (!lead) return { name: "", temperatureValue: null };
+// preferredRowNumber (optional): same as writeAiCells() above.
+async function getLeadNameAndTemperature(sheets, sheetId, phone, preferredRowNumber) {
+  const lead = await findLeadRow(sheets, phone, sheetId, preferredRowNumber);
+  // Ambiguous is treated the same as not-found here - this is only used
+  // for the call-log's informational fields, not a write, so there's
+  // nothing to flag; updateLeadAfterCall() (called moments later in the
+  // same request) is what actually flags an ambiguous phone number.
+  if (!lead || lead.ambiguous) return { name: "", temperatureValue: null };
 
   const nameCol = getColumnIndex(lead.headers, "name");
   const temperatureCol = getColumnIndex(lead.headers, "temperature");
@@ -2493,8 +2904,20 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
   // threaded through the callback URL's query string instead (see /voice
   // and placeCall() above, which set it).
   const callerEmail = req.query.callerEmail;
+  // Set ONLY when the rep resolved which lead this call was for at call
+  // time - via the "which lead?" duplicate-phone picker, or there was only
+  // ever one match to begin with - see /voice above (which is what
+  // actually threads this through from the browser) and findLeadRow()'s
+  // own comment for the full picture. Empty for calls placed some other
+  // way (e.g. POST /api/call), in which case every lookup below falls back
+  // to its normal phone-based search.
+  const leadRowNumber = req.query.leadRowNumber ? parseInt(req.query.leadRowNumber, 10) : undefined;
 
-  console.log("Call finished:", To, CallStatus, SipResponseCode, "for", callerEmail || "(no callerEmail)");
+  console.log(
+    "Call finished:", To, CallStatus, SipResponseCode,
+    "for", callerEmail || "(no callerEmail)",
+    leadRowNumber ? `(lead row ${leadRowNumber})` : ""
+  );
 
   const outcome = mapCallStatusToOutcome(CallStatus, SipResponseCode);
 
@@ -2527,7 +2950,7 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
   // never stop the rest of the normal call-handling below.
   try {
     const { name, temperatureValue } = sheetsContext
-      ? await getLeadNameAndTemperature(sheetsContext.sheets, sheetsContext.sheetId, To)
+      ? await getLeadNameAndTemperature(sheetsContext.sheets, sheetsContext.sheetId, To, leadRowNumber)
       : { name: "", temperatureValue: null };
 
     await appendCallLogEntry({
@@ -2552,7 +2975,13 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
   if (sheetsContext) {
     try {
       const { sheets, sheetId } = sheetsContext;
-      const callNumber = await updateLeadAfterCall(sheets, sheetId, To, outcome);
+      // { callNumber, rowNumber } - or null if the lead couldn't be
+      // resolved at all (not found, or still ambiguous - see
+      // updateLeadAfterCall()'s own comment). rowNumber gets threaded on
+      // to every write below, so the WHOLE chain for this call operates on
+      // the exact same row updateLeadAfterCall() already resolved -
+      // nothing re-derives independently from here on.
+      const outcomeResult = await updateLeadAfterCall(sheets, sheetId, To, outcome, leadRowNumber);
 
       // Grab whatever transcript lines we recorded for this call. We deliberately
       // do NOT delete it here - we keep the most recent call's transcript around
@@ -2562,7 +2991,9 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
       const normalizedPhone = normalizePhoneNumber(To);
       const transcriptLines = callTranscripts.get(normalizedPhone) || [];
 
-      if (callNumber && transcriptLines.length > 0) {
+      if (outcomeResult && transcriptLines.length > 0) {
+        const { callNumber, rowNumber } = outcomeResult;
+
         // Save it to a local file too, so it's easy to reuse for testing later
         // via POST /api/test-insights or GET /api/last-transcript - this is
         // "nice to have" only, so a failure here should never break the call.
@@ -2580,8 +3011,8 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
         }
 
         const transcriptText = transcriptLinesToText(transcriptLines);
-        const insights = await generateAndSaveInsights(sheets, sheetId, To, transcriptText, callNumber);
-        await updateRelationshipHistory(callerEmail || null, sheets, sheetId, To, insights, transcriptText, callNumber);
+        const insights = await generateAndSaveInsights(sheets, sheetId, To, transcriptText, callNumber, rowNumber, callerEmail || null);
+        await updateRelationshipHistory(callerEmail || null, sheets, sheetId, To, insights, transcriptText, callNumber, rowNumber);
       }
     } catch (error) {
       console.error("Failed to update sheet after call:", error.message);
@@ -2609,6 +3040,17 @@ app.post("/api/regenerate-insights", async (req, res) => {
     return res.json({ success: true, message: "AI insights regenerated. (demo)" });
   }
 
+  // Real signed-in users only past this point - this calls Gemini for real,
+  // at our cost. Checked up front (moved earlier than the getCurrentUser()
+  // call this route used to only make much later, deep in the try block)
+  // so an unapproved user gets the clear pilot-blocked reason immediately,
+  // before wasting a transcript lookup or sheet read.
+  const user = await getCurrentUser(req);
+  if (!user) {
+    return res.status(401).json({ error: "Not signed in." });
+  }
+  if (blockIfNoPaidAccess(res, user.email)) return;
+
   const normalizedPhone = normalizePhoneNumber(phone);
   const transcriptLines = callTranscripts.get(normalizedPhone);
 
@@ -2621,24 +3063,16 @@ app.post("/api/regenerate-insights", async (req, res) => {
   try {
     const { sheets, sheetId } = await getSheetsContextForRequest(req);
     const lead = await findLeadRow(sheets, phone, sheetId);
-
-    if (!lead) {
-      return res.status(404).json({ error: "No lead found in the sheet for this phone number." });
-    }
+    if (respondIfLeadUnresolved(res, lead)) return;
 
     // Use the lead's current Attempts count as the "call number" - the same
     // number that call would have used the first time insights were generated.
     const attemptsCol = getColumnIndex(lead.headers, "attempts");
     const callNumber = parseInt(lead.row[attemptsCol], 10) || 1;
 
-    // Demo mode already returned above, so a real signed-in user should
-    // always be present here - but fall back to null rather than throw if
-    // the session somehow expired mid-request.
-    const currentUser = await getCurrentUser(req);
-
     const transcriptText = transcriptLinesToText(transcriptLines);
-    const insights = await generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber);
-    await updateRelationshipHistory(currentUser ? currentUser.email : null, sheets, sheetId, phone, insights, transcriptText, callNumber);
+    const insights = await generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber, lead.rowNumber, user.email);
+    await updateRelationshipHistory(user.email, sheets, sheetId, phone, insights, transcriptText, callNumber, lead.rowNumber);
 
     res.json({ success: true, message: "AI insights regenerated." });
   } catch (error) {
@@ -2686,6 +3120,7 @@ app.post("/api/test-insights", async (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not signed in." });
   }
+  if (blockIfNoPaidAccess(res, user.email)) return;
 
   const { transcript, callNumber } = req.body;
 
@@ -2698,7 +3133,8 @@ app.post("/api/test-insights", async (req, res) => {
     ? transcriptLinesToText(transcript)
     : transcript;
 
-  const insights = await generateCallInsights(transcriptText, callNumber || 1);
+  const sellerContext = buildSellerContextString(user);
+  const insights = await generateCallInsights(transcriptText, callNumber || 1, sellerContext);
 
   if (!insights) {
     return res.status(502).json({ error: "AI insights failed - check the server log for details." });
@@ -2755,9 +3191,15 @@ browserFeedWss.on("connection", (ws) => {
 });
 
 // Sends one transcript line (e.g. { speaker: "Rep", text: "hello" }) to
-// every browser page that's currently connected and listening.
-function broadcastTranscriptLine(speaker, text) {
-  const message = JSON.stringify({ speaker, text });
+// EVERY browser page currently connected - this socket is shared by every
+// signed-in rep's browser, not just the one on this call (see
+// browserFeedClients above), so `phone` is included on every message and
+// each browser is responsible for ignoring anything that isn't for its own
+// active call (see startTranscriptFeed() in shared-lead-panel.js). Without
+// this, two reps on calls at the same time would see each other's
+// transcripts/tips interleaved into their own panels.
+function broadcastTranscriptLine(speaker, text, phone) {
+  const message = JSON.stringify({ speaker, text, phone });
 
   for (const client of browserFeedClients) {
     if (client.readyState === client.OPEN) {
@@ -2769,8 +3211,10 @@ function broadcastTranscriptLine(speaker, text) {
 // Sends one live coaching tip to every browser page currently connected.
 // Uses a "type: tip" field (transcript-line messages have no "type" field)
 // so the frontend can tell the two apart on the same /browser-feed socket.
-function broadcastCoachingTip(text) {
-  const message = JSON.stringify({ type: "tip", text });
+// `phone` - see broadcastTranscriptLine() above for why every broadcast
+// carries this and why the frontend must filter by it.
+function broadcastCoachingTip(text, phone) {
+  const message = JSON.stringify({ type: "tip", text, phone });
 
   for (const client of browserFeedClients) {
     if (client.readyState === client.OPEN) {
@@ -2785,7 +3229,11 @@ function broadcastCoachingTip(text) {
 // straight to the browser. Sent as its own "callOutcome" type on the same
 // socket as transcript lines/tips, but never shown in either of those
 // panels - see startRealCall()'s pendingCallOutcomeCallback in
-// shared-lead-panel.js, which is what actually reads this.
+// shared-lead-panel.js, which is what actually reads this. This socket is
+// shared by every signed-in rep's browser (see browserFeedClients above),
+// so `phone` is what lets a browser tell "my call finished" apart from
+// "a DIFFERENT rep's call finished at the same moment" - shared-lead-
+// panel.js only accepts this message if it matches its own active call.
 function broadcastCallOutcome(phone, outcome, connected) {
   const message = JSON.stringify({ type: "callOutcome", phone, outcome, connected });
 
@@ -2802,6 +3250,9 @@ function broadcastCallOutcome(phone, outcome, connected) {
 //
 // `track` is Twilio's raw track name ("inbound" or "outbound") - we log with
 // this until we know who it actually is.
+// `phone` is THIS call's lead phone number - stamped onto every broadcast
+// transcript line so the right browser (and only the right browser) shows
+// it - see broadcastTranscriptLine()'s own comment for why that matters.
 // `getLabel` is a function we call to look up the current Rep/Lead label for
 // this track (it starts out unknown and gets filled in dynamically - see
 // assignSpeakerLabels below).
@@ -2809,7 +3260,7 @@ function broadcastCallOutcome(phone, outcome, connected) {
 // the caller can notice "someone just spoke" and assign labels if needed.
 // `onFinalLine` is called with the finished "Rep: ..."/"Lead: ..." line each
 // time a FINAL result comes in, so the caller can save it for AI insights.
-async function openDeepgramConnection(track, getLabel, onSpeech, onFinalLine) {
+async function openDeepgramConnection(track, phone, getLabel, onSpeech, onFinalLine) {
   try {
     const connection = await deepgramClient.listen.v1.connect({
       model: "nova-2-phonecall", // a model tuned specifically for phone call audio
@@ -2836,7 +3287,7 @@ async function openDeepgramConnection(track, getLabel, onSpeech, onFinalLine) {
       if (message.is_final) {
         console.log(`${label}: ${transcript}`);
         // Push this final line to the frontend page(s) watching the call live.
-        broadcastTranscriptLine(label, transcript);
+        broadcastTranscriptLine(label, transcript, phone);
         // Save it too, so we have the full transcript once the call ends.
         onFinalLine(label, transcript);
       } else {
@@ -2896,6 +3347,14 @@ wss.on("connection", (ws) => {
   // right key in callTranscripts, so /call-status can find them later.
   let currentLeadPhone = null;
 
+  // This call's rep's seller-context string (see getSellerContextForEmail()
+  // below), resolved once at "start" from the callerEmail custom parameter
+  // /voice attaches to the stream - used to personalize live coaching tips.
+  // "" (never null) if there's no callerEmail or no profile filled in, same
+  // as every other seller-context call site - checkForCoachingTip below
+  // just passes it straight through either way.
+  let currentCallerSellerContext = "";
+
   // ── Live AI coaching state, for THIS call only ──────────────────────
   // How many transcript lines existed the last time we checked for a tip -
   // lets us skip the AI call if not enough new conversation has happened.
@@ -2938,7 +3397,7 @@ wss.on("connection", (ws) => {
       const recentLines = allLines.slice(-COACHING_WINDOW_LINES);
       const recentText = transcriptLinesToText(recentLines);
 
-      const tip = await generateCoachingTip(recentText, lastCoachingTip);
+      const tip = await generateCoachingTip(recentText, lastCoachingTip, currentCallerSellerContext);
       if (!tip) return; // the common case - AI decided nothing was worth flagging
 
       // Defensive check: even though the prompt tells the AI not to repeat
@@ -2947,7 +3406,7 @@ wss.on("connection", (ws) => {
       if (tip.trim() === (lastCoachingTip || "").trim()) return;
 
       lastCoachingTip = tip;
-      broadcastCoachingTip(tip);
+      broadcastCoachingTip(tip, currentLeadPhone);
     } finally {
       coachingCheckInProgress = false;
     }
@@ -2979,61 +3438,91 @@ wss.on("connection", (ws) => {
     );
   }
 
+  // The ENTIRE body below is wrapped in try/catch - this is an async
+  // event-listener callback, so nothing else awaits or catches whatever it
+  // returns. Without this, a synchronous throw anywhere in here (e.g.
+  // sendMedia() throwing "Socket is not open." the instant Deepgram drops a
+  // track - confirmed in the SDK's own source) becomes an unhandled promise
+  // rejection, which crashes the ENTIRE Node process on Node's current
+  // defaults - taking down every other rep's in-progress call along with
+  // it. One flaky Deepgram connection must only ever break ITS OWN call,
+  // never the whole server.
   ws.on("message", async (message) => {
-    const data = JSON.parse(message);
+    try {
+      const data = JSON.parse(message);
 
-    if (data.event === "connected") {
-      console.log("Media stream event: connected");
-    } else if (data.event === "start") {
-      currentCallSid = data.start.callSid;
-      console.log("Media stream event: start (call SID:", currentCallSid + ")");
-      mediaMessageCount = 0;
-      trackLabels = {};
-      speakerAssigned = false;
+      if (data.event === "connected") {
+        console.log("Media stream event: connected");
+      } else if (data.event === "start") {
+        currentCallSid = data.start.callSid;
+        console.log("Media stream event: start (call SID:", currentCallSid + ")");
+        mediaMessageCount = 0;
+        trackLabels = {};
+        speakerAssigned = false;
 
-      // Read the lead's phone number back out of the custom parameter we
-      // attached to the stream in /voice, and start a fresh transcript for it.
-      const leadPhone = data.start.customParameters && data.start.customParameters.leadPhone;
-      currentLeadPhone = normalizePhoneNumber(leadPhone);
-      callTranscripts.set(currentLeadPhone, []);
+        // Read the lead's phone number back out of the custom parameter we
+        // attached to the stream in /voice, and start a fresh transcript for it.
+        const leadPhone = data.start.customParameters && data.start.customParameters.leadPhone;
+        currentLeadPhone = normalizePhoneNumber(leadPhone);
+        callTranscripts.set(currentLeadPhone, []);
 
-      // Fresh coaching state for this new call, and start its periodic tip
-      // check running (see checkForCoachingTip above).
-      linesSeenAtLastCoachingCheck = 0;
-      lastCoachingTip = null;
-      coachingIntervalHandle = setInterval(checkForCoachingTip, COACHING_CHECK_INTERVAL_MS);
+        // Same idea for the rep's own seller-context profile - see
+        // currentCallerSellerContext's own comment above. Resolved once per
+        // call (not on every coaching check) since it can't change mid-call.
+        const callerEmail = data.start.customParameters && data.start.customParameters.callerEmail;
+        currentCallerSellerContext = await getSellerContextForEmail(callerEmail);
 
-      // Open one Deepgram connection per track, so the rep and lead each
-      // get transcribed separately instead of one blended transcript.
-      const trackNames = ["inbound", "outbound"];
-      const connections = await Promise.all(
-        trackNames.map((track) =>
-          openDeepgramConnection(track, getLabel, assignSpeakerLabels, recordFinalLine)
-        )
-      );
-      trackNames.forEach((track, i) => {
-        trackConnections[track] = connections[i];
-      });
-    } else if (data.event === "media") {
-      mediaMessageCount++;
-      if (mediaMessageCount % 50 === 0) {
-        console.log(`Media stream: ${mediaMessageCount} audio chunks received so far`);
+        // Fresh coaching state for this new call, and start its periodic tip
+        // check running (see checkForCoachingTip above).
+        linesSeenAtLastCoachingCheck = 0;
+        lastCoachingTip = null;
+        coachingIntervalHandle = setInterval(checkForCoachingTip, COACHING_CHECK_INTERVAL_MS);
+
+        // Open one Deepgram connection per track, so the rep and lead each
+        // get transcribed separately instead of one blended transcript.
+        const trackNames = ["inbound", "outbound"];
+        const connections = await Promise.all(
+          trackNames.map((track) =>
+            openDeepgramConnection(track, currentLeadPhone, getLabel, assignSpeakerLabels, recordFinalLine)
+          )
+        );
+        trackNames.forEach((track, i) => {
+          trackConnections[track] = connections[i];
+        });
+      } else if (data.event === "media") {
+        mediaMessageCount++;
+        if (mediaMessageCount % 50 === 0) {
+          console.log(`Media stream: ${mediaMessageCount} audio chunks received so far`);
+        }
+
+        // Twilio tells us which track ("inbound"/"outbound") this chunk
+        // belongs to - send it only to that track's Deepgram connection.
+        const track = data.media.track;
+        const connection = trackConnections[track];
+
+        // readyState 1 is the standard WebSocket OPEN value (the same
+        // check the Deepgram SDK's own sendMedia() does internally before
+        // THROWING if it's anything else) - checking it here ourselves
+        // means we skip this one audio chunk instead of ever hitting that
+        // throw. A connection can go non-open between chunks (Deepgram-side
+        // drop, or our own close() on "stop"/"close" below) without us
+        // having nulled the reference yet, so `if (connection)` alone
+        // isn't enough - see the audit notes for why this crashed the
+        // server before this fix.
+        if (connection && connection.readyState === 1) {
+          // Twilio sends audio as base64 text - decode it back to raw bytes.
+          const audioBytes = Buffer.from(data.media.payload, "base64");
+          connection.sendMedia(audioBytes);
+        }
+      } else if (data.event === "stop") {
+        console.log("Media stream event: stop (audio stream ended)");
+        closeTrackConnections(trackConnections);
+        clearInterval(coachingIntervalHandle);
       }
-
-      // Twilio tells us which track ("inbound"/"outbound") this chunk
-      // belongs to - send it only to that track's Deepgram connection.
-      const track = data.media.track;
-      const connection = trackConnections[track];
-
-      if (connection) {
-        // Twilio sends audio as base64 text - decode it back to raw bytes.
-        const audioBytes = Buffer.from(data.media.payload, "base64");
-        connection.sendMedia(audioBytes);
-      }
-    } else if (data.event === "stop") {
-      console.log("Media stream event: stop (audio stream ended)");
-      closeTrackConnections(trackConnections);
-      clearInterval(coachingIntervalHandle);
+    } catch (error) {
+      // Log and move on - never let a single bad frame/dropped connection
+      // take down the whole process (see the comment above this handler).
+      console.error("Media stream: error handling a message, this call's transcription may be affected:", error.message);
     }
   });
 

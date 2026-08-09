@@ -119,6 +119,14 @@ function rowToUser(row) {
     // or skipped it) - see updateUserTourCompleted() below and the "Replay
     // tour" option in the profile menu.
     tourCompleted: row.tour_completed || false,
+    // The 5-question "seller context" profile (see updateUserSellerContext()
+    // below and buildSellerContextString() in server.js) - every field
+    // optional free text, "" if never filled in.
+    sellsWhat: row.sells_what || "",
+    sellsTo: row.sells_to || "",
+    callGoal: row.call_goal || "",
+    commonObjections: row.common_objections || "",
+    extraContext: row.extra_context || "",
     accessToken: row.access_token,
     refreshToken: row.refresh_token,
     // Postgres returns BIGINT columns as strings (so huge values never
@@ -191,6 +199,13 @@ async function saveUser(email, tokens, profile) {
     // Whether this user has already seen the guided product tour - never
     // touched here, so re-signing in never makes it auto-run again.
     tourCompleted: existing.tourCompleted || false,
+    // The 5-question "seller context" profile, set via POST /api/profile -
+    // never touched here, so re-signing in doesn't erase it.
+    sellsWhat: existing.sellsWhat || "",
+    sellsTo: existing.sellsTo || "",
+    callGoal: existing.callGoal || "",
+    commonObjections: existing.commonObjections || "",
+    extraContext: existing.extraContext || "",
     accessToken: tokens.access_token,
     // Google only sends a refresh_token the FIRST time you consent (or
     // whenever we force prompt=consent, like we do above) - if THIS sign-in
@@ -238,6 +253,54 @@ async function updateUserCompany(email, company) {
   if (!users[email]) return null;
 
   users[email].company = company;
+  saveUsersFile(users);
+  return users[email];
+}
+
+// Updates the 5-question "seller context" profile (see buildSellerContext-
+// String() in server.js) - the profile panel's own "Your sales context"
+// section always submits all 5 fields together as one form, but this
+// leaves any field NOT present in `fields` untouched rather than clearing
+// it, same spirit as updateUserCompany above. Every field is optional free
+// text - an explicit "" clears it, `undefined` (not sent) leaves it alone.
+// Returns the updated user, or null if we've never seen this email before.
+async function updateUserSellerContext(email, fields) {
+  const { sellsWhat, sellsTo, callGoal, commonObjections, extraContext } = fields;
+
+  if (db.isDatabaseMode) {
+    try {
+      // pg rejects `undefined` as a bind parameter, so "not provided" has to
+      // be sent as NULL - COALESCE(..., existing column) is what then turns
+      // that NULL back into "leave it alone" server-side. An explicit ""
+      // (the rep cleared the field) is NOT null, so COALESCE correctly lets
+      // it through and clears the column.
+      const toParam = (value) => (value === undefined ? null : value);
+      const result = await db.query(
+        `UPDATE users SET
+           sells_what = COALESCE($1, sells_what),
+           sells_to = COALESCE($2, sells_to),
+           call_goal = COALESCE($3, call_goal),
+           common_objections = COALESCE($4, common_objections),
+           extra_context = COALESCE($5, extra_context)
+         WHERE email = $6
+         RETURNING *`,
+        [toParam(sellsWhat), toParam(sellsTo), toParam(callGoal), toParam(commonObjections), toParam(extraContext), email]
+      );
+      return rowToUser(result.rows[0]);
+    } catch (error) {
+      console.error("Failed to update seller context in database:", error.message);
+      return null;
+    }
+  }
+
+  const users = loadUsersFile();
+  if (!users[email]) return null;
+
+  if (sellsWhat !== undefined) users[email].sellsWhat = sellsWhat;
+  if (sellsTo !== undefined) users[email].sellsTo = sellsTo;
+  if (callGoal !== undefined) users[email].callGoal = callGoal;
+  if (commonObjections !== undefined) users[email].commonObjections = commonObjections;
+  if (extraContext !== undefined) users[email].extraContext = extraContext;
   saveUsersFile(users);
   return users[email];
 }
@@ -614,6 +677,7 @@ module.exports = {
   saveUser,
   getUser,
   updateUserCompany,
+  updateUserSellerContext,
   updateUserTheme,
   updateUserSheetId,
   updateUserPhoneColumnFormatted,

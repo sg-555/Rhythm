@@ -76,7 +76,12 @@ async function createTablesIfNotExist() {
       access_token TEXT,
       refresh_token TEXT,
       token_expiry BIGINT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      sells_what TEXT,
+      sells_to TEXT,
+      call_goal TEXT,
+      common_objections TEXT,
+      extra_context TEXT
     )
   `);
   // CREATE TABLE IF NOT EXISTS only helps on a brand-new database - it does
@@ -84,6 +89,14 @@ async function createTablesIfNotExist() {
   // column existed. ADD COLUMN IF NOT EXISTS covers that case too, so this
   // stays "safe to run every time the server starts" for existing deployments.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tour_completed BOOLEAN NOT NULL DEFAULT FALSE`);
+  // The 5-question "seller context" profile (see buildSellerContextString()
+  // in server.js) - personalizes the AI prompts. Every field is optional and
+  // free text; NULL/empty just means that field is omitted from the prompt.
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sells_what TEXT`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sells_to TEXT`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS call_goal TEXT`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS common_objections TEXT`);
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS extra_context TEXT`);
 
   // One row per completed call - what the Analytics dashboard is built
   // from. Scoped by user_email so each rep only ever sees their own calls

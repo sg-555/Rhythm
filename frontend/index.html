@@ -539,6 +539,43 @@
       border-color: var(--interactive);
     }
 
+    /* "Your sales context" profile fields (see renderProfilePanel()'s
+       seller-context section) - unlike the single-field company-row, these
+       5 fields stack vertically, each with its own label, sharing ONE Save
+       button below all of them rather than one per field. */
+    .seller-context-intro {
+      margin: 0 0 var(--sp-3) 0;
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      line-height: 1.5;
+    }
+
+    .seller-context-field {
+      margin-bottom: var(--sp-3);
+    }
+
+    .seller-context-field label {
+      display: block;
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+      margin-bottom: var(--sp-1);
+    }
+
+    .seller-context-field input {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+    }
+
+    .seller-context-field input:focus-visible {
+      border-color: var(--interactive);
+    }
+
     /* Theme toggle - three-way segmented control (System/Light/Dark) in the
        profile panel. Only one button is ever "active" at a time. */
     .theme-toggle-group {
@@ -2145,6 +2182,21 @@
     </div>
   </div>
 
+  <!-- TEMPORARY pilot access gate (see pilotAccess.js in server.js) - shown
+       INSTEAD OF the app for a genuinely signed-in user who just isn't on
+       the pilot allowlist yet. See checkSignedIn(). Reuses .onboarding-
+       card's plain centered-card styling rather than its own CSS, same
+       reasoning as onboardingOverlay above. Remove this overlay (and the
+       pilotBlocked handling in checkSignedIn()) once the pilot gate itself
+       is retired. -->
+  <div id="pilotBlockedOverlay" class="sign-in-overlay">
+    <div class="onboarding-card">
+      <h1>Access is invite-only right now</h1>
+      <p class="onboarding-subhead" id="pilotBlockedMessage"></p>
+      <button id="pilotBlockedSignOutButton" class="call-button" type="button">Sign out</button>
+    </div>
+  </div>
+
   <!-- Always-visible while in demo mode - see checkSignedIn(). -->
   <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
@@ -2420,6 +2472,10 @@
     // anyone) is signed in, and show the sign-in overlay instead if nobody is.
     const signInOverlay = document.getElementById("signInOverlay");
     const onboardingOverlay = document.getElementById("onboardingOverlay");
+    // TEMPORARY pilot access gate - see pilotAccess.js in server.js and
+    // checkSignedIn() below.
+    const pilotBlockedOverlay = document.getElementById("pilotBlockedOverlay");
+    const pilotBlockedMessage = document.getElementById("pilotBlockedMessage");
     const userBarName = document.getElementById("userBarName");
     const userBarAvatar = document.getElementById("userBarAvatar");
     const userBarNameText = document.getElementById("userBarNameText");
@@ -2491,11 +2547,17 @@
     }
 
     // Checks who's signed in and updates the page to match. Returns one of:
-    // "ready"       - safe to load leads / set up calling (demo, or a real
-    //                 user who already has a sheet connected)
-    // "onboarding"  - a real signed-in user with NO sheet yet - show the
-    //                 onboarding screen instead of the leads table
-    // "signedOut"   - show the sign-in overlay; nothing to load
+    // "ready"        - safe to load leads / set up calling (demo, or a real
+    //                  user who already has a sheet connected and pilot access)
+    // "onboarding"   - a real signed-in user with NO sheet yet - show the
+    //                  onboarding screen instead of the leads table
+    // "pilotBlocked" - TEMPORARY: a real signed-in user who isn't on the
+    //                  pilot allowlist - show the invite-only screen instead
+    //                  of onboarding/the app. See pilotAccess.js in
+    //                  server.js - the REAL enforcement is server-side, on
+    //                  every paid endpoint; this is just so they aren't
+    //                  staring at a leads table where every action 403s.
+    // "signedOut"    - show the sign-in overlay; nothing to load
     async function checkSignedIn() {
       try {
         const response = await fetch("/api/me");
@@ -2522,6 +2584,14 @@
             applyTheme(data.user.theme);
           }
 
+          if (!data.user.paidAccess) {
+            onboardingOverlay.style.display = "none";
+            pilotBlockedMessage.textContent = data.pilotBlockedMessage;
+            pilotBlockedOverlay.style.display = "flex";
+            return "pilotBlocked";
+          }
+          pilotBlockedOverlay.style.display = "none";
+
           if (!data.user.hasSheet) {
             onboardingOverlay.style.display = "flex";
             return "onboarding";
@@ -2531,6 +2601,7 @@
         }
 
         onboardingOverlay.style.display = "none";
+        pilotBlockedOverlay.style.display = "none";
 
         if (demoMode) {
           signInOverlay.style.display = "none";
@@ -2564,6 +2635,10 @@
     }
 
     signOutButton.addEventListener("click", handleSignOut);
+    // Pilot-blocked screen's own Sign out button - same action, since a
+    // blocked user has no other way to leave that screen (there's no app
+    // underneath it for them to navigate away to).
+    document.getElementById("pilotBlockedSignOutButton").addEventListener("click", handleSignOut);
 
     // ── Profile panel (real signed-in users only, not demo mode) ─────────
     // Shows the Google profile (name/email/photo), an editable company
@@ -2909,6 +2984,88 @@
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
+      // ── Seller context (5-question profile) ────────────────────────────
+      // Personalizes the AI's notes/coaching/SMS drafts - see
+      // buildSellerContextString() in server.js. Every field is optional;
+      // leaving all 5 blank makes every AI prompt behave EXACTLY as before
+      // this existed. Real signed-in users only - demo mode has no real
+      // profile to persist this against, and its canned AI output never
+      // reads it anyway.
+      if (!demoMode) {
+        const sellerContextContainer = document.createElement("div");
+
+        const sellerContextIntro = document.createElement("p");
+        sellerContextIntro.className = "seller-context-intro";
+        sellerContextIntro.textContent = "Helps your AI coach and notes give sharper, more relevant output.";
+        sellerContextContainer.appendChild(sellerContextIntro);
+
+        const sellerContextFieldDefs = [
+          { key: "sellsWhat", label: "What do you sell?", placeholder: "e.g. B2B logistics software" },
+          { key: "sellsTo", label: "Who do you typically sell to?", placeholder: "e.g. operations managers at mid-size manufacturers" },
+          { key: "callGoal", label: "What's your main goal on these calls?", placeholder: "e.g. book a demo / qualify / close" },
+          { key: "commonObjections", label: "What objections do you hear most?", placeholder: "e.g. too expensive, already have a vendor" },
+          { key: "extraContext", label: "Anything else that helps? (optional)", placeholder: "e.g. we compete on speed not price; keep it consultative" },
+        ];
+
+        const sellerContext = profile.sellerContext || {};
+        const sellerContextInputs = {};
+
+        sellerContextFieldDefs.forEach(({ key, label, placeholder }) => {
+          const fieldWrap = document.createElement("div");
+          fieldWrap.className = "seller-context-field";
+
+          const fieldLabel = document.createElement("label");
+          fieldLabel.textContent = label;
+          fieldWrap.appendChild(fieldLabel);
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.placeholder = placeholder;
+          input.value = sellerContext[key] || "";
+          fieldWrap.appendChild(input);
+
+          sellerContextInputs[key] = input;
+          sellerContextContainer.appendChild(fieldWrap);
+        });
+
+        const saveSellerContextButton = document.createElement("button");
+        saveSellerContextButton.className = "call-button";
+        saveSellerContextButton.textContent = "Save";
+        sellerContextContainer.appendChild(saveSellerContextButton);
+
+        const sellerContextStatus = document.createElement("span");
+        sellerContextStatus.className = "call-status";
+        sellerContextContainer.appendChild(sellerContextStatus);
+
+        // Always submits all 5 fields together, even untouched/blank ones -
+        // simpler than tracking which changed, and harmless: POST
+        // /api/profile just re-saves the same value for anything unchanged.
+        saveSellerContextButton.addEventListener("click", async () => {
+          saveSellerContextButton.disabled = true;
+          sellerContextStatus.textContent = "Saving...";
+          try {
+            const body = {};
+            sellerContextFieldDefs.forEach(({ key }) => {
+              body[key] = sellerContextInputs[key].value;
+            });
+            const response = await fetch("/api/profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not save.");
+            sellerContextStatus.textContent = "Saved - takes effect on your next call.";
+          } catch (error) {
+            sellerContextStatus.textContent = "Error: " + error.message;
+          } finally {
+            saveSellerContextButton.disabled = false;
+          }
+        });
+
+        profilePanelContent.appendChild(makeSection("Your sales context", sellerContextContainer));
+      }
+
       // "My sheets" - shown in demo mode too now, with three fake sheets
       // (see GET /api/sheets) and fewer actions - see renderSheetsSection().
       if (sheets && sheets.length > 0) {
@@ -3164,8 +3321,12 @@
       callCell.appendChild(callStatus);
       row.appendChild(callCell);
 
-      // Clicking anywhere else in the row opens the lead detail side panel.
-      row.addEventListener("click", () => openLeadPanel(lead.Phone));
+      // Clicking anywhere else in the row opens the lead detail side panel -
+      // passing this ROW's own RowNumber (not just its phone number) so the
+      // panel opens exactly this lead, even if another lead in the sheet
+      // shares the same phone number. See openLeadPanel() in
+      // shared-lead-panel.js.
+      row.addEventListener("click", () => openLeadPanel(lead.Phone, lead.RowNumber));
 
       return row;
     }
@@ -4194,6 +4355,20 @@
         return;
       }
 
+      // The dialer has no rep standing by to answer a "which lead?" picker
+      // (see shared-lead-panel.js's showLeadPicker, used by the manual Call
+      // button) - so a phone number shared by more than one lead is skipped
+      // here instead, rather than risking notes/outcome landing on the
+      // wrong one. Demo mode never has real duplicates, so this only
+      // applies to real dialing.
+      if (!demoMode && findDuplicateLeadsForPhone(lead.phone).length > 1) {
+        dialerQueue.shift();
+        dialerStats.skipped++;
+        dialerStatusText.textContent = `Skipping ${lead.name || "(no name)"} - this phone number is on more than one lead, so the dialer can't tell them apart. Call this one manually instead.`;
+        setTimeout(dialerDialNext, 800);
+        return;
+      }
+
       dialerQueue.shift();
       dialerState = "dialing";
       dialerStats.called++;
@@ -4661,7 +4836,7 @@
           if (!tourActive) return false; // Skip/Esc fired while we were waiting
 
           if (!clickedThemselves) {
-            await openLeadPanel(firstLead.Phone);
+            await openLeadPanel(firstLead.Phone, firstLead.RowNumber);
           }
           // Let the panel's slide-in transition (--transition) and its
           // freshly-fetched content finish rendering before anything below

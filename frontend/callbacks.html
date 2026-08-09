@@ -487,6 +487,41 @@
       border-color: var(--interactive);
     }
 
+    /* "Your sales context" profile fields - see index.html's copy of this
+       for the full explanation. */
+    .seller-context-intro {
+      margin: 0 0 var(--sp-3) 0;
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      line-height: 1.5;
+    }
+
+    .seller-context-field {
+      margin-bottom: var(--sp-3);
+    }
+
+    .seller-context-field label {
+      display: block;
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
+      margin-bottom: var(--sp-1);
+    }
+
+    .seller-context-field input {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: var(--sp-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--ink);
+    }
+
+    .seller-context-field input:focus-visible {
+      border-color: var(--interactive);
+    }
+
     /* Theme toggle - see index.html's copy of this for the full explanation. */
     .theme-toggle-group {
       display: flex;
@@ -1444,6 +1479,19 @@
     </div>
   </div>
 
+  <!-- TEMPORARY pilot access gate (see pilotAccess.js in server.js) - shown
+       INSTEAD OF this page's content for a genuinely signed-in user who
+       isn't on the pilot allowlist yet. See checkSignedIn(). Remove this
+       overlay (and the pilotBlocked handling in checkSignedIn()) once the
+       pilot gate itself is retired. -->
+  <div id="pilotBlockedOverlay" class="sign-in-overlay">
+    <div class="sign-in-card">
+      <h1 class="signin-headline">Access is invite-only right now</h1>
+      <p class="signin-subhead" id="pilotBlockedMessage"></p>
+      <button id="pilotBlockedSignOutButton" class="signin-action-button" type="button">Sign out</button>
+    </div>
+  </div>
+
   <!-- Always-visible while in demo mode - see checkSignedIn(). -->
   <div id="demoBanner" class="demo-banner">DEMO MODE — simulated data, no real calls</div>
 
@@ -1601,6 +1649,10 @@
     // full explanation.
     const signInOverlay = document.getElementById("signInOverlay");
     const onboardingOverlay = document.getElementById("onboardingOverlay");
+    // TEMPORARY pilot access gate - see pilotAccess.js in server.js and
+    // checkSignedIn() below.
+    const pilotBlockedOverlay = document.getElementById("pilotBlockedOverlay");
+    const pilotBlockedMessage = document.getElementById("pilotBlockedMessage");
     const userBarName = document.getElementById("userBarName");
     const userBarAvatar = document.getElementById("userBarAvatar");
     const userBarNameText = document.getElementById("userBarNameText");
@@ -1648,8 +1700,8 @@
       }
     }
 
-    // Returns "ready" / "onboarding" / "signedOut" - see index.html's copy
-    // of this for the full explanation.
+    // Returns "ready" / "onboarding" / "pilotBlocked" / "signedOut" - see
+    // index.html's copy of this for the full explanation.
     async function checkSignedIn() {
       try {
         const response = await fetch("/api/me");
@@ -1673,6 +1725,16 @@
             applyTheme(data.user.theme);
           }
 
+          // TEMPORARY pilot access gate - see index.html's copy of this for
+          // the full explanation.
+          if (!data.user.paidAccess) {
+            onboardingOverlay.style.display = "none";
+            pilotBlockedMessage.textContent = data.pilotBlockedMessage;
+            pilotBlockedOverlay.style.display = "flex";
+            return "pilotBlocked";
+          }
+          pilotBlockedOverlay.style.display = "none";
+
           if (!data.user.hasSheet) {
             onboardingOverlay.style.display = "flex";
             return "onboarding";
@@ -1682,6 +1744,7 @@
         }
 
         onboardingOverlay.style.display = "none";
+        pilotBlockedOverlay.style.display = "none";
 
         if (demoMode) {
           signInOverlay.style.display = "none";
@@ -1710,6 +1773,9 @@
     }
 
     signOutButton.addEventListener("click", handleSignOut);
+    // Pilot-blocked screen's own Sign out button - see index.html's copy of
+    // this for the full explanation.
+    document.getElementById("pilotBlockedSignOutButton").addEventListener("click", handleSignOut);
 
     // ── Profile panel (real signed-in users only, not demo mode) - see
     // index.html's copy of this for the full explanation. ────────────────
@@ -2012,6 +2078,80 @@
 
       profilePanelContent.appendChild(makeSection("Company", companyContainer));
 
+      // ── Seller context (5-question profile) - see index.html's copy of
+      // this for the full explanation. ─────────────────────────────────
+      if (!demoMode) {
+        const sellerContextContainer = document.createElement("div");
+
+        const sellerContextIntro = document.createElement("p");
+        sellerContextIntro.className = "seller-context-intro";
+        sellerContextIntro.textContent = "Helps your AI coach and notes give sharper, more relevant output.";
+        sellerContextContainer.appendChild(sellerContextIntro);
+
+        const sellerContextFieldDefs = [
+          { key: "sellsWhat", label: "What do you sell?", placeholder: "e.g. B2B logistics software" },
+          { key: "sellsTo", label: "Who do you typically sell to?", placeholder: "e.g. operations managers at mid-size manufacturers" },
+          { key: "callGoal", label: "What's your main goal on these calls?", placeholder: "e.g. book a demo / qualify / close" },
+          { key: "commonObjections", label: "What objections do you hear most?", placeholder: "e.g. too expensive, already have a vendor" },
+          { key: "extraContext", label: "Anything else that helps? (optional)", placeholder: "e.g. we compete on speed not price; keep it consultative" },
+        ];
+
+        const sellerContext = profile.sellerContext || {};
+        const sellerContextInputs = {};
+
+        sellerContextFieldDefs.forEach(({ key, label, placeholder }) => {
+          const fieldWrap = document.createElement("div");
+          fieldWrap.className = "seller-context-field";
+
+          const fieldLabel = document.createElement("label");
+          fieldLabel.textContent = label;
+          fieldWrap.appendChild(fieldLabel);
+
+          const input = document.createElement("input");
+          input.type = "text";
+          input.placeholder = placeholder;
+          input.value = sellerContext[key] || "";
+          fieldWrap.appendChild(input);
+
+          sellerContextInputs[key] = input;
+          sellerContextContainer.appendChild(fieldWrap);
+        });
+
+        const saveSellerContextButton = document.createElement("button");
+        saveSellerContextButton.className = "call-button";
+        saveSellerContextButton.textContent = "Save";
+        sellerContextContainer.appendChild(saveSellerContextButton);
+
+        const sellerContextStatus = document.createElement("span");
+        sellerContextStatus.className = "call-status";
+        sellerContextContainer.appendChild(sellerContextStatus);
+
+        saveSellerContextButton.addEventListener("click", async () => {
+          saveSellerContextButton.disabled = true;
+          sellerContextStatus.textContent = "Saving...";
+          try {
+            const body = {};
+            sellerContextFieldDefs.forEach(({ key }) => {
+              body[key] = sellerContextInputs[key].value;
+            });
+            const response = await fetch("/api/profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Could not save.");
+            sellerContextStatus.textContent = "Saved - takes effect on your next call.";
+          } catch (error) {
+            sellerContextStatus.textContent = "Error: " + error.message;
+          } finally {
+            saveSellerContextButton.disabled = false;
+          }
+        });
+
+        profilePanelContent.appendChild(makeSection("Your sales context", sellerContextContainer));
+      }
+
       // "My sheets" - shown in demo mode too now - see index.html's copy of
       // this for the full explanation.
       if (sheets && sheets.length > 0) {
@@ -2176,7 +2316,13 @@
         if (isNaN(callBackDate)) return;
         if (callBackDate <= now) return; // not upcoming - already due
 
-        upcoming.push({ name: lead.Name, phone: lead.Phone, temperatureValue: lead.TemperatureValue, callBackDate });
+        upcoming.push({
+          name: lead.Name,
+          phone: lead.Phone,
+          temperatureValue: lead.TemperatureValue,
+          rowNumber: lead.RowNumber,
+          callBackDate,
+        });
       });
 
       upcoming.sort((a, b) => a.callBackDate - b.callBackDate);
@@ -2253,8 +2399,12 @@
 
       // Clicking anywhere else on the item opens the full detail panel
       // (attachCallHandlers already stopPropagation()s the Call/Hang Up
-      // buttons, so clicking those doesn't also trigger this).
-      item.addEventListener("click", () => openLeadPanel(entry.phone));
+      // buttons, so clicking those doesn't also trigger this). entry.row-
+      // Number came straight from /api/leads/due or allLeads (see
+      // loadCallbacksList above) - NOT a fresh phone lookup - so this opens
+      // exactly the lead this item represents, even if its phone number is
+      // shared with another lead.
+      item.addEventListener("click", () => openLeadPanel(entry.phone, entry.rowNumber));
 
       return item;
     }
@@ -2518,6 +2668,7 @@
           status: (findFullLeadByPhone(lead.phone) || {}).Status || "",
           reason: lead.reason,
           highlighted: true, // due leads are always highlighted
+          rowNumber: lead.rowNumber,
         }));
 
         const upcomingEntries = upcoming.map((item) => ({
@@ -2529,6 +2680,7 @@
           // Upcoming ones only get highlighted once they're within the
           // reminder window (1 hour) - further-out ones stay calm.
           highlighted: item.callBackDate - new Date() <= REMINDER_WINDOW_MS,
+          rowNumber: item.rowNumber,
         }));
 
         callbacksAllEntries = dueEntries.concat(upcomingEntries);

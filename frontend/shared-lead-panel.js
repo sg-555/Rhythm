@@ -74,14 +74,18 @@ function updateWorkspaceLayout() {
     // pushes live transcript lines to us while a call is active.
     let transcriptSocket = null;
 
-    // Set by startRealCall() right before a REAL call is placed FOR THE
-    // DIALER specifically (dialerOptions.onComplete) - the next "callOutcome"
-    // message on the socket is for that call (only one call is ever active
-    // at a time, so there's no need to match it by phone number). Cleared
-    // the moment it's used. See broadcastCallOutcome() in server.js - this
-    // is the ONLY way the browser learns how a real call actually went,
-    // since Twilio reports that to our SERVER (POST /call-status), never
-    // straight to the browser.
+    // Set by startRealCall() right before EVERY real call now (not just
+    // power-dialer ones) - the next "callOutcome" message matching THIS
+    // call's phone (see the phone-match filtering in startTranscriptFeed()
+    // above - the /browser-feed socket is shared by every signed-in rep's
+    // browser) is passed to this callback. It's how the power dialer learns
+    // a call finished, AND how the on-screen call status shows the real
+    // reason (Connected/No answer/Busy/Invalid number/...) instead of a
+    // generic SDK-level message - see the "disconnect" handler in
+    // startRealCall() below. Cleared the moment it's used. See
+    // broadcastCallOutcome() in server.js - this is the ONLY way the
+    // browser learns how a real call actually went, since Twilio reports
+    // that to our SERVER (POST /call-status), never straight to the browser.
     let pendingCallOutcomeCallback = null;
 
     // Empties the transcript panel and shows a "listening" placeholder -
@@ -137,8 +141,42 @@ function updateWorkspaceLayout() {
       }
     }
 
+    // Strips everything except digits, so two phone numbers can be compared
+    // regardless of formatting ("+91 98765 43210" vs "919876543210" vs
+    // "98765-43210" all become the same string). A small self-contained
+    // copy rather than relying on the host page defining one - this file
+    // documents at the top exactly what it assumes the page provides, and
+    // this isn't one of those things.
+    function normalizePhoneForCallMatch(phone) {
+      return (phone || "").replace(/\D/g, "");
+    }
+
+    // Finds every OTHER lead in allLeads that shares this exact phone number
+    // (itself included) - used to catch the "two leads, one phone number"
+    // case BEFORE a real call is placed, since our backend can't tell those
+    // rows apart by phone number alone (see findLeadRow() in server.js).
+    // Returns the full list of colliding leads (length 1 = no collision).
+    // Demo mode never calls this - the seeded demo sheets can't develop
+    // duplicate phone numbers the way a rep's real Google Sheet can.
+    function findDuplicateLeadsForPhone(phone) {
+      const normalized = normalizePhoneForCallMatch(phone);
+      if (!normalized) return [];
+      return (allLeads || []).filter((lead) => normalizePhoneForCallMatch(lead.Phone) === normalized);
+    }
+
     // Opens the connection to our backend's live transcript feed. Called
     // when a call starts.
+    //
+    // IMPORTANT: /browser-feed is ONE socket SHARED by every signed-in
+    // rep's browser (see browserFeedClients in server.js) - it is NOT
+    // scoped to this one call. Every message - transcript lines, coaching
+    // tips, AND call-outcome events - carries a `phone` field identifying
+    // which call it's actually for, and this handler drops anything that
+    // doesn't match activeCallPhone (the call THIS browser itself is on).
+    // Without this check, two reps on calls at the same time would see
+    // each other's transcripts/tips interleaved into their own panels, and
+    // the power dialer could advance/stop based on a DIFFERENT rep's call
+    // outcome entirely.
     function startTranscriptFeed() {
       resetTranscriptPanel();
       resetCoachingPanel();
@@ -150,6 +188,18 @@ function updateWorkspaceLayout() {
 
       transcriptSocket.addEventListener("message", (event) => {
         const data = JSON.parse(event.data);
+
+        // Every message type carries `phone` - if it isn't for the call
+        // THIS browser is actually on right now, ignore it entirely. Both
+        // sides get digit-normalized first, since the sheet's phone format
+        // and the backend's normalized format don't necessarily match
+        // character-for-character. Requiring BOTH sides to be non-empty
+        // (not just equal) avoids a false-positive match if this browser
+        // has no active call at all (activeCallPhone null) at the exact
+        // moment a stray message arrives.
+        if (!activeCallPhone || !data.phone || normalizePhoneForCallMatch(data.phone) !== normalizePhoneForCallMatch(activeCallPhone)) {
+          return;
+        }
 
         // Coaching tips arrive with a "type: tip" field; transcript lines
         // don't have a "type" field at all - that's how we tell them apart.
@@ -177,8 +227,22 @@ function updateWorkspaceLayout() {
       }
     }
 
+    // True once we know FOR SURE the browser denied/blocked microphone
+    // access - as opposed to `device` being null for some OTHER reason
+    // (still loading, a bad token, Twilio registration still in flight).
+    // Read by startRealCall() below: permission denial never resolves on
+    // its own, so it needs a genuinely different message than "not ready
+    // yet, wait a moment" - that message would be actively misleading here.
+    let micPermissionDenied = false;
+
     // Asks the browser for microphone access. A call can't work without this.
     async function requestMicrophonePermission() {
+      // Shown BEFORE the browser's own native permission prompt appears -
+      // a first-time user has no context otherwise for why they're
+      // suddenly being asked, and an unexplained prompt makes people
+      // reflexively click "Block" more often.
+      deviceStatus.textContent = "Rhythm needs your microphone to place calls.";
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         // We only needed this to trigger the permission prompt - stop it right away.
@@ -186,6 +250,7 @@ function updateWorkspaceLayout() {
         stream.getTracks().forEach((track) => track.stop());
         return true;
       } catch (error) {
+        micPermissionDenied = true;
         deviceStatus.textContent = "Microphone permission is required to make calls.";
         return false;
       }
@@ -228,6 +293,12 @@ function updateWorkspaceLayout() {
     // doing nothing if clicked.
 
     // Updates ONE button instance to match whatever is currently true:
+    // - this lead has no phone number at all -> permanently disabled,
+    //   regardless of call state (checked FIRST, before anything else
+    //   below - see instance.hasNoPhone, set once in attachCallHandlers).
+    //   Without this, the "no call active anywhere" branch just below
+    //   would happily re-enable it the moment any OTHER call on the page
+    //   finishes, since it unconditionally clears .disabled for everyone.
     // - no call active anywhere -> back to its own normal label (some
     //   buttons say "Call", the reminder toast's says "Call now" - we
     //   remember each one's own label in instance.originalCallLabel so we
@@ -235,6 +306,14 @@ function updateWorkspaceLayout() {
     // - this IS the lead being called -> "Hang Up"
     // - a DIFFERENT lead is being called -> disabled "Call in progress"
     function refreshOneCallButton(instance) {
+      if (instance.hasNoPhone) {
+        instance.callButton.disabled = true;
+        instance.callButton.textContent = "No phone number";
+        instance.callButton.style.display = "inline-block";
+        instance.hangupButton.style.display = "none";
+        return;
+      }
+
       if (!activeCallPhone) {
         instance.callButton.disabled = false;
         instance.callButton.textContent = instance.originalCallLabel;
@@ -395,16 +474,112 @@ function updateWorkspaceLayout() {
       }, totalDurationMs);
     }
 
+    // Turns a raw outcome string (Connected/No answer/Busy/Invalid number/
+    // Switched off - unreachable/Failed/Unknown - see mapCallStatusToOutcome()
+    // in server.js for exactly which values exist) into what shows next to
+    // the Call button. A normal, successful call still just says "Call
+    // ended" - anything else names the real reason, so a failed/invalid
+    // number doesn't look identical on screen to a completed call.
+    function formatCallEndedStatus(outcome) {
+      if (!outcome || outcome === "Connected") return "Call ended";
+      return `Call ended (${outcome})`;
+    }
+
+    // Joins lead names into plain English: "A and B" for two, "A, B, and C"
+    // for three or more - used by showLeadPicker()'s copy below.
+    function joinLeadNames(names) {
+      if (names.length <= 1) return names[0] || "";
+      if (names.length === 2) return `${names[0]} and ${names[1]}`;
+      return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+    }
+
+    // Shows a plain "which lead is this?" picker naming the actual
+    // colliding leads, and resolves with whichever one the rep picks - or
+    // null if they back out (clicked outside/pressed Escape), which callers
+    // treat as "don't place the call". Built fresh every call from
+    // candidates (see findDuplicateLeadsForPhone) - nothing about a past
+    // choice is ever remembered, since the rep might mean the OTHER lead
+    // next time. Once the duplicate row is deleted from the sheet, this
+    // simply stops being shown - no separate "reset" needed anywhere.
+    function showLeadPicker(candidates) {
+      return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.style.cssText =
+          "position:fixed;inset:0;background:rgba(44,62,80,0.45);z-index:600;" +
+          "display:flex;align-items:center;justify-content:center;padding:16px;";
+
+        const card = document.createElement("div");
+        card.style.cssText =
+          "background:var(--bg-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-panel);" +
+          "padding:var(--sp-5);max-width:420px;width:100%;box-sizing:border-box;";
+
+        const names = candidates.map((lead) => lead.Name || "an unnamed lead");
+        const message = document.createElement("p");
+        message.style.cssText = "margin:0 0 var(--sp-4) 0;color:var(--ink);font-size:var(--text-body);line-height:1.5;";
+        message.textContent = `This number is on ${candidates.length} leads: ${joinLeadNames(names)}. Which one are you calling?`;
+        card.appendChild(message);
+
+        const buttonWrap = document.createElement("div");
+        buttonWrap.style.cssText = "display:flex;flex-direction:column;gap:var(--sp-2);";
+
+        function finish(result) {
+          document.removeEventListener("keydown", onKeydown);
+          if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+          resolve(result);
+        }
+
+        function onKeydown(event) {
+          if (event.key === "Escape") finish(null);
+        }
+
+        candidates.forEach((lead) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = lead.Name || "Unnamed lead";
+          button.style.cssText =
+            "background:var(--interactive);color:var(--on-interactive);border:none;font-weight:600;" +
+            "font-size:0.95rem;padding:var(--sp-2) var(--sp-4);border-radius:var(--radius-sm);cursor:pointer;";
+          button.addEventListener("click", () => finish(lead));
+          buttonWrap.appendChild(button);
+        });
+        card.appendChild(buttonWrap);
+
+        const tip = document.createElement("p");
+        tip.style.cssText = "margin:var(--sp-4) 0 0 0;color:var(--ink-muted);font-size:var(--text-meta);";
+        tip.textContent = "Tip: To stop this, open your sheet and delete one of the duplicate rows.";
+        card.appendChild(tip);
+
+        overlay.appendChild(card);
+        overlay.addEventListener("click", (event) => {
+          if (event.target === overlay) finish(null);
+        });
+        document.addEventListener("keydown", onKeydown);
+
+        document.body.appendChild(overlay);
+      });
+    }
+
     // Starts a REAL call to this phone number - shared by the manual Call
     // button (see attachCallHandlers below) and the power dialer, which
     // calls this directly (no click involved) when auto-dialing through its
-    // queue. dialerOptions (optional): { onComplete(outcome, connected) } -
-    // see pendingCallOutcomeCallback above for how the outcome actually
-    // arrives.
-    async function startRealCall(phone, dialerOptions) {
+    // queue. callOptions (optional): { onComplete(outcome, connected),
+    // leadRowNumber } - onComplete is read by the dialer (see
+    // pendingCallOutcomeCallback above for how the outcome actually
+    // arrives); leadRowNumber is the specific sheet row the CALLER already
+    // resolved this phone number to (see showLeadPicker() above) - passed
+    // straight through to /voice so every write this call produces lands on
+    // that exact row instead of being re-derived from the phone number.
+    async function startRealCall(phone, callOptions) {
       if (!device) {
-        deviceStatus.textContent = "Calling isn't ready yet - please wait a moment.";
-        if (dialerOptions && dialerOptions.onComplete) dialerOptions.onComplete("Unknown", false);
+        // Permission denial never resolves on its own - "please wait a
+        // moment" would tell the rep to do nothing, when they actually
+        // need to go change a browser setting. Anything else (still
+        // loading, a bad token) genuinely IS transient, so that message
+        // stays accurate for those cases.
+        deviceStatus.textContent = micPermissionDenied
+          ? "Microphone access is blocked. Click the padlock/site-info icon in your browser's address bar, allow microphone access for this site, then reload the page."
+          : "Calling isn't ready yet - please wait a moment.";
+        if (callOptions && callOptions.onComplete) callOptions.onComplete("Unknown", false);
         return;
       }
 
@@ -419,15 +594,49 @@ function updateWorkspaceLayout() {
       refreshAllCallButtons("Connecting...");
       startTranscriptFeed();
 
-      if (dialerOptions && dialerOptions.onComplete) {
-        pendingCallOutcomeCallback = dialerOptions.onComplete;
+      // Set once THIS call's real outcome is known (see
+      // pendingCallOutcomeCallback below) - read by the "disconnect"
+      // handler further down to show the real reason on screen, if it's
+      // already arrived by the time the call actually ends.
+      let knownOutcome = null;
+      // If "disconnect" fires BEFORE the outcome is known, it registers
+      // itself here so the outcome (whenever it arrives) can wake it up,
+      // instead of it having to poll/guess.
+      let notifyOutcomeArrived = null;
+
+      // Always registered now (not just for the power dialer) - see this
+      // variable's own comment above for the full picture. Forwards to the
+      // dialer's onComplete if this call came from it, AND makes the
+      // outcome available to the "disconnect" handler below either way.
+      // Kept in its own local const (myOutcomeCallback), not just read back
+      // off the shared pendingCallOutcomeCallback variable, so the safety-
+      // net timeout and the catch block below can tell "is this STILL my
+      // registration" apart from "a NEWER call already replaced it" -
+      // otherwise a slow timer from THIS call could wrongly cancel a
+      // different, later call's still-legitimate wait.
+      const myOutcomeCallback = (outcome, connected) => {
+        knownOutcome = outcome;
+        if (callOptions && callOptions.onComplete) callOptions.onComplete(outcome, connected);
+        if (notifyOutcomeArrived) notifyOutcomeArrived(outcome);
+      };
+      pendingCallOutcomeCallback = myOutcomeCallback;
+
+      if (callOptions && callOptions.onComplete) {
         // Safety net: if the callOutcome message is ever dropped (a flaky
-        // connection, a server hiccup), don't leave the dialer waiting
+        // connection, a server hiccup), don't leave the DIALER waiting
         // forever - treat it as unknown/non-connect and let it move on.
+        // (The on-screen status text below has its own, much shorter wait -
+        // see the "disconnect" handler - so it isn't held up by this.)
+        // Guarded by the identity check: if pendingCallOutcomeCallback no
+        // longer points at OUR OWN registration, this call's outcome was
+        // already resolved (myOutcomeCallback already ran, already called
+        // onComplete once) and the dialer has since moved on to a newer
+        // call - firing onComplete again here would be a stray SECOND call
+        // for a call that's already been accounted for.
         setTimeout(() => {
-          if (pendingCallOutcomeCallback === dialerOptions.onComplete) {
+          if (pendingCallOutcomeCallback === myOutcomeCallback) {
             pendingCallOutcomeCallback = null;
-            dialerOptions.onComplete("Unknown", false);
+            callOptions.onComplete("Unknown", false);
           }
         }, 20000);
       }
@@ -438,23 +647,64 @@ function updateWorkspaceLayout() {
         // "callerEmail" rides along the same way - /voice forwards it into
         // /call-status's callback URL, since Twilio calls that with no
         // browser session at all, so it needs another way to know WHICH
-        // signed-in user's sheet this call belongs to.
-        activeCall = await device.connect({ params: { To: phone, callerEmail: currentUserEmail || "" } });
+        // signed-in user's sheet this call belongs to. "leadRowNumber" only
+        // rides along when the rep resolved a duplicate-phone-number pick
+        // (see showLeadPicker above) - /voice forwards it the same way, so
+        // /call-status and everything downstream write to that exact row.
+        activeCall = await device.connect({
+          params: {
+            To: phone,
+            callerEmail: currentUserEmail || "",
+            leadRowNumber: callOptions && callOptions.leadRowNumber ? String(callOptions.leadRowNumber) : "",
+          },
+        });
 
         activeCall.on("accept", () => refreshAllCallButtons("In Call"));
-        activeCall.on("disconnect", () => endActiveCall("Call ended"));
+
+        // Fires identically whether the call genuinely connected and ran
+        // its course, or the number was invalid/unreachable and never
+        // connected at all - Twilio tears down the browser leg the same
+        // way either time, so this event alone can't tell them apart. The
+        // REAL reason is computed server-side and arrives separately (see
+        // pendingCallOutcomeCallback above) - an independent signal with
+        // no guaranteed order relative to THIS event, so it can plausibly
+        // arrive a moment late. Show "Call ended" immediately either way
+        // (the rep shouldn't wait to see something happen), then wait
+        // briefly for the real reason before finalizing - if it arrives in
+        // time, the text is upgraded to name it; if not, plain "Call
+        // ended" stands as the final message, same as before this fix.
+        activeCall.on("disconnect", () => {
+          refreshAllCallButtons("Call ended");
+
+          if (knownOutcome) {
+            endActiveCall(formatCallEndedStatus(knownOutcome));
+            return;
+          }
+
+          const graceTimer = setTimeout(() => {
+            notifyOutcomeArrived = null;
+            endActiveCall("Call ended");
+          }, 2000);
+
+          notifyOutcomeArrived = (outcome) => {
+            clearTimeout(graceTimer);
+            notifyOutcomeArrived = null;
+            endActiveCall(formatCallEndedStatus(outcome));
+          };
+        });
+
         activeCall.on("cancel", () => endActiveCall("Call cancelled"));
         activeCall.on("error", (error) => endActiveCall("Call error: " + error.message));
       } catch (error) {
         endActiveCall("Could not start call: " + error.message);
         // The call never even started, so no Twilio webhook will EVER
-        // arrive for it - resolve the dialer right away instead of making
-        // it wait out the full 20s fallback above for nothing.
-        if (pendingCallOutcomeCallback) {
-          const callback = pendingCallOutcomeCallback;
+        // arrive for it - resolve it right away (dialer + anything waiting
+        // on the outcome, via the same callback set up above) instead of
+        // leaving it waiting on a message that can never come.
+        if (pendingCallOutcomeCallback === myOutcomeCallback) {
           pendingCallOutcomeCallback = null;
-          callback("Unknown", false);
         }
+        myOutcomeCallback("Unknown", false);
       }
     }
 
@@ -467,8 +717,28 @@ function updateWorkspaceLayout() {
       // Remember this button's own label (e.g. "Call" or the toast's
       // "Call now") BEFORE anything else touches it, so refreshOneCallButton
       // can restore the right wording later instead of a generic "Call".
-      const instance = { phone, callButton, hangupButton, callStatus, originalCallLabel: callButton.textContent };
+      // hasNoPhone: a lead with no phone number at all (e.g. added to the
+      // sheet with just a name so far) would otherwise reach POST /voice
+      // with an empty "To" - Twilio then speaks "No destination number was
+      // provided" INTO the rep's own connected leg, which is a confusing,
+      // avoidable failure. Caught here instead, once, for every place a
+      // Call button gets created (table rows, the lead panel, reminder
+      // toasts) - see refreshOneCallButton() above for how this keeps the
+      // button disabled regardless of what else is happening on the page.
+      const hasNoPhone = !phone || !phone.trim();
+      const instance = {
+        phone,
+        callButton,
+        hangupButton,
+        callStatus,
+        originalCallLabel: callButton.textContent,
+        hasNoPhone,
+      };
       callButtonInstances.push(instance);
+
+      if (hasNoPhone) {
+        callButton.title = "Add a phone number in the sheet to call this lead.";
+      }
 
       // Match reality immediately - e.g. if a call to this exact lead (or a
       // different one) is already in progress when this button is created,
@@ -479,6 +749,14 @@ function updateWorkspaceLayout() {
         // Stops the click from also bubbling up to the row's own click
         // handler, which would otherwise open the side panel at the same time.
         event.stopPropagation();
+
+        if (hasNoPhone) {
+          // The button is already disabled (see refreshOneCallButton), so a
+          // real click can't normally reach here - kept as a defensive
+          // safety net, same spirit as the check just below.
+          callStatus.textContent = "This lead has no phone number.";
+          return;
+        }
 
         if (activeCall || (demoMode && isInCall)) {
           // Shouldn't normally happen, since every other lead's button is
@@ -493,9 +771,25 @@ function updateWorkspaceLayout() {
         // power dialer calls directly when auto-dialing (see index.html).
         if (demoMode) {
           startDemoCall(phone);
-        } else {
-          await startRealCall(phone);
+          return;
         }
+
+        // If this phone number is on more than one lead, our backend can't
+        // tell them apart by phone number alone - ask the rep which one
+        // they mean BEFORE placing the call, and carry their choice all the
+        // way through (see startRealCall's leadRowNumber above) so nothing
+        // gets written to the wrong lead. Fires fresh every click - see
+        // showLeadPicker's own comment for why nothing here remembers a
+        // past choice.
+        const duplicates = findDuplicateLeadsForPhone(phone);
+        if (duplicates.length > 1) {
+          const chosen = await showLeadPicker(duplicates);
+          if (!chosen) return; // rep backed out - don't place the call
+          await startRealCall(phone, { leadRowNumber: chosen.RowNumber });
+          return;
+        }
+
+        await startRealCall(phone);
       });
 
       // Ends the call early when the user clicks "Hang Up" - works from
@@ -654,6 +948,43 @@ function updateWorkspaceLayout() {
       return line;
     }
 
+    // MUST match the exact text writeAiInsightsFailurePlaceholder() in
+    // server.js writes to the sheet when Gemini fails even after every
+    // retry - this is how the frontend tells "AI genuinely failed, offer a
+    // retry button" apart from any other unparseable text that might end
+    // up in this cell (e.g. a rep typing something into it by hand, where
+    // a "Regenerate" button wouldn't make sense).
+    const AI_INSIGHTS_FAILURE_TEXT = "AI insights unavailable — will retry later";
+
+    // Calls POST /api/regenerate-insights for this lead, with a loading/
+    // success/failure status shown inline next to the button - see
+    // renderAiNotesSection() below, which only shows this button when the
+    // AI Notes cell holds AI_INSIGHTS_FAILURE_TEXT. On success we simply
+    // reopen the panel (openLeadPanel re-fetches + re-renders everything) -
+    // if the regeneration genuinely worked, real notes show and this
+    // button is gone; if Gemini failed again, the exact same placeholder
+    // (and this same button) reappears - the result speaks for itself
+    // without needing a separate "well, did it actually work" message.
+    async function regenerateInsights(lead, button, status) {
+      button.disabled = true;
+      status.textContent = "Regenerating...";
+
+      try {
+        const response = await fetch("/api/regenerate-insights", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: lead.phone }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not regenerate insights.");
+
+        await openLeadPanel(lead.phone, lead.rowNumber); // re-fetches and re-renders the whole panel with fresh data
+      } catch (error) {
+        button.disabled = false;
+        status.textContent = "Error: " + error.message;
+      }
+    }
+
     // Renders the read-only "AI Notes" section using the already-parsed
     // fields the backend sent us (see parseAiNotesBlock in server.js). Each
     // line is built through makeNoteLine, so labels are always bold and
@@ -680,6 +1011,29 @@ function updateWorkspaceLayout() {
         raw.className = "ai-note-line";
         raw.textContent = lead.aiNotes;
         container.appendChild(raw);
+
+        // Specifically the known AI-failure placeholder (not just any
+        // unparseable text) - offer a one-click way to retry, since
+        // nothing retries this automatically (see AI_INSIGHTS_FAILURE_TEXT above).
+        if (lead.aiNotes === AI_INSIGHTS_FAILURE_TEXT) {
+          const row = document.createElement("div");
+          row.className = "suggested-stage-row"; // same small button+status row layout used below
+
+          const regenerateButton = document.createElement("button");
+          regenerateButton.type = "button";
+          regenerateButton.className = "btn-secondary";
+          regenerateButton.textContent = "Regenerate insights";
+          row.appendChild(regenerateButton);
+
+          const status = document.createElement("span");
+          status.className = "call-status";
+          row.appendChild(status);
+
+          regenerateButton.addEventListener("click", () => regenerateInsights(lead, regenerateButton, status));
+
+          container.appendChild(row);
+        }
+
         return container;
       }
 
@@ -1137,16 +1491,27 @@ function updateWorkspaceLayout() {
       panelContent.appendChild(makeSection("Send Follow-up SMS", renderSmsSection(lead)));
     }
 
-    // Opens the panel for one lead (looked up fresh by phone number, so it
-    // always shows the latest sheet data - not just whatever the table had
-    // loaded when the page first opened).
-    async function openLeadPanel(phone) {
+    // Opens the panel for one lead (looked up fresh, so it always shows the
+    // latest sheet data - not just whatever the table had loaded when the
+    // page first opened). rowNumber (optional): the specific sheet row the
+    // CALLER already knows this lead is - e.g. the exact row the rep
+    // clicked in the table, or a call-back list entry that already carries
+    // its own row identity. Passed straight through to the backend instead
+    // of leaving it to re-derive the lead from the phone number alone, so
+    // clicking a specific row always opens THAT lead, even if another lead
+    // happens to share its phone number. Callers with no row context to
+    // give (a bare phone number, nothing else) simply omit it - the backend
+    // then falls back to its normal ambiguous-refuse behaviour.
+    async function openLeadPanel(phone, rowNumber) {
       leadPanel.classList.add("open");
       panelOverlay.classList.add("open");
       panelContent.innerHTML = '<p class="message">Loading...</p>';
 
       try {
-        const response = await fetch(`/api/leads/${encodeURIComponent(phone)}`);
+        const url = rowNumber
+          ? `/api/leads/${encodeURIComponent(phone)}?rowNumber=${encodeURIComponent(rowNumber)}`
+          : `/api/leads/${encodeURIComponent(phone)}`;
+        const response = await fetch(url);
         const lead = await response.json();
         if (!response.ok) throw new Error(lead.error || "Could not load lead.");
 
