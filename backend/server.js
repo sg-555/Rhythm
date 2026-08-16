@@ -2162,10 +2162,20 @@ function buildGreetingTwiml() {
 // never pass one - those aren't placed from a lead row at all, so
 // /call-status falls back to its normal phone-based lookup for them,
 // exactly as it always has.
-function withCallerEmail(url, callerEmail, leadRowNumber) {
+// rawPhone is ALSO optional, same reasoning as leadRowNumber - only /voice
+// has one to offer. Twilio's status callback later echoes back "To", but
+// that's whatever toE164() actually DIALED (e.g. "+919819876680"), never
+// necessarily what's stored in the sheet or typed by the rep (e.g. the bare
+// "9819876680" toE164() built that from) - digit-count changes toE164() can
+// make (adding "91", dropping a leading "0") mean plain digit-stripping
+// can no longer reconcile the two. rawPhone is what lets /call-status use
+// the ORIGINAL phone for every matching/lookup purpose instead - see its
+// own comment for the full list of what that fixes.
+function withCallerEmail(url, callerEmail, leadRowNumber, rawPhone) {
   const params = new URLSearchParams();
   if (callerEmail) params.set("callerEmail", callerEmail);
   if (leadRowNumber) params.set("leadRowNumber", leadRowNumber);
+  if (rawPhone) params.set("rawPhone", rawPhone);
   const query = params.toString();
   return query ? `${url}?${query}` : url;
 }
@@ -2347,7 +2357,12 @@ app.post("/voice", validateTwilioRequest, (req, res) => {
     // Passes the lead's phone number into the media stream as a custom
     // parameter, so /media-stream knows which lead this call's transcript
     // belongs to (it shows up as data.start.customParameters.leadPhone).
-    stream.parameter({ name: "leadPhone", value: to });
+    // Deliberately the RAW number (rawTo), not the E.164 dial target (to) -
+    // this becomes the callTranscripts key and the broadcast tag the
+    // frontend matches against activeCallPhone, which is ALSO the raw
+    // number (see startRealCall() in shared-lead-panel.js) - "to" is only
+    // ever for the actual Twilio dial below, never for matching.
+    stream.parameter({ name: "leadPhone", value: rawTo });
 
     // Same idea, for the CALLER's email - lets /media-stream look up this
     // rep's seller-context profile (see getSellerContextForEmail() below)
@@ -2359,12 +2374,13 @@ app.post("/voice", validateTwilioRequest, (req, res) => {
     const dial = response.dial({ callerId: process.env.TWILIO_FROM_NUMBER });
 
     // Tells Twilio to notify our /call-status endpoint once this call
-    // finishes - with callerEmail (and leadRowNumber, if we have one)
-    // carried through the URL itself, since Twilio's status callback
-    // request won't have our session cookie.
+    // finishes - with callerEmail, leadRowNumber (if we have one), and
+    // rawTo carried through the URL itself, since Twilio's status callback
+    // request won't have our session cookie (and its own "To" field will
+    // only ever have the E.164 DIALED number, not this original one).
     dial.number(
       {
-        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail, leadRowNumber),
+        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail, leadRowNumber, rawTo),
         statusCallbackEvent: ["completed"],
         statusCallbackMethod: "POST",
       },
@@ -2912,9 +2928,16 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
   // way (e.g. POST /api/call), in which case every lookup below falls back
   // to its normal phone-based search.
   const leadRowNumber = req.query.leadRowNumber ? parseInt(req.query.leadRowNumber, 10) : undefined;
+  // The ORIGINAL phone number (raw, whatever format it's stored/typed in) -
+  // see withCallerEmail()'s own comment above for why this must be used for
+  // every matching/lookup purpose below instead of To. Falls back to To for
+  // calls with no rawPhone to offer (POST /api/call / /api/test-call, via
+  // placeCall() - those supply "to" directly, already in whatever format
+  // the caller gave it, so there's no separate "raw" form to recover).
+  const phone = req.query.rawPhone || To;
 
   console.log(
-    "Call finished:", To, CallStatus, SipResponseCode,
+    "Call finished:", To, "(matching as", phone + ")", CallStatus, SipResponseCode,
     "for", callerEmail || "(no callerEmail)",
     leadRowNumber ? `(lead row ${leadRowNumber})` : ""
   );
@@ -2925,8 +2948,11 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
   // writes, AI insight generation) can take several seconds, and the power
   // dialer needs to know NOW whether to auto-advance (not connected) or
   // stop and hand control back to the rep (connected) - it shouldn't have
-  // to wait for the slower stuff to finish first.
-  broadcastCallOutcome(To, outcome, outcome === "Connected");
+  // to wait for the slower stuff to finish first. Uses `phone` (raw), not
+  // To - this is exactly what the frontend's activeCallPhone comparison
+  // (see startTranscriptFeed() in shared-lead-panel.js) needs to match
+  // against, since that's ALSO the raw, un-normalized number.
+  broadcastCallOutcome(phone, outcome, outcome === "Connected");
 
   // Resolve WHICH user's sheet this call belongs to, ONCE, up front. If we
   // can't (missing/unknown email, expired tokens), we still log the call
@@ -2950,12 +2976,15 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
   // never stop the rest of the normal call-handling below.
   try {
     const { name, temperatureValue } = sheetsContext
-      ? await getLeadNameAndTemperature(sheetsContext.sheets, sheetsContext.sheetId, To, leadRowNumber)
+      ? await getLeadNameAndTemperature(sheetsContext.sheets, sheetsContext.sheetId, phone, leadRowNumber)
       : { name: "", temperatureValue: null };
 
+    // phone (raw), not To - the Analytics drill-down matches call-log
+    // entries back to sheet leads via normalizePhoneNumber(lead.phone) (see
+    // /api/analytics/drilldown), which is ALSO the raw stored format.
     await appendCallLogEntry({
       timestamp: new Date().toISOString(), // ISO so it sorts/parses reliably
-      phone: normalizePhoneNumber(To),
+      phone: normalizePhoneNumber(phone),
       name,
       outcome,
       connected: outcome === "Connected",
@@ -2980,15 +3009,20 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
       // updateLeadAfterCall()'s own comment). rowNumber gets threaded on
       // to every write below, so the WHOLE chain for this call operates on
       // the exact same row updateLeadAfterCall() already resolved -
-      // nothing re-derives independently from here on.
-      const outcomeResult = await updateLeadAfterCall(sheets, sheetId, To, outcome, leadRowNumber);
+      // nothing re-derives independently from here on. Uses `phone` (raw) -
+      // findLeadRow() compares this against the sheet's own stored (raw)
+      // value, so feeding it To (E.164) here is exactly what silently broke
+      // this write for a bare-10-digit/leading-0 lead before this fix.
+      const outcomeResult = await updateLeadAfterCall(sheets, sheetId, phone, outcome, leadRowNumber);
 
       // Grab whatever transcript lines we recorded for this call. We deliberately
       // do NOT delete it here - we keep the most recent call's transcript around
       // in memory so POST /api/regenerate-insights can re-run insights later if
       // this attempt fails. (The next call to this same lead will replace it
-      // with a fresh, empty transcript when it starts.)
-      const normalizedPhone = normalizePhoneNumber(To);
+      // with a fresh, empty transcript when it starts.) Uses `phone` (raw) -
+      // this MUST match the key /media-stream's "start" handler set (see
+      // currentLeadPhone there), which is now also the raw number.
+      const normalizedPhone = normalizePhoneNumber(phone);
       const transcriptLines = callTranscripts.get(normalizedPhone) || [];
 
       if (outcomeResult && transcriptLines.length > 0) {
@@ -3001,7 +3035,7 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
           fs.writeFileSync(
             LAST_TRANSCRIPT_FILE_PATH,
             JSON.stringify(
-              { phone: To, callNumber, savedAt: new Date().toISOString(), transcript: transcriptLines },
+              { phone, callNumber, savedAt: new Date().toISOString(), transcript: transcriptLines },
               null,
               2
             )
@@ -3010,9 +3044,13 @@ app.post("/call-status", validateTwilioRequest, async (req, res) => {
           console.error("Failed to save last-transcript.json:", error.message);
         }
 
+        // Both calls below also resolve a lead by phone internally
+        // (writeAiCells / findLeadRow) if rowNumber's own re-validation
+        // ever fails - `phone` (raw) here keeps that fallback consistent
+        // with everything else in this handler, same reasoning as above.
         const transcriptText = transcriptLinesToText(transcriptLines);
-        const insights = await generateAndSaveInsights(sheets, sheetId, To, transcriptText, callNumber, rowNumber, callerEmail || null);
-        await updateRelationshipHistory(callerEmail || null, sheets, sheetId, To, insights, transcriptText, callNumber, rowNumber);
+        const insights = await generateAndSaveInsights(sheets, sheetId, phone, transcriptText, callNumber, rowNumber, callerEmail || null);
+        await updateRelationshipHistory(callerEmail || null, sheets, sheetId, phone, insights, transcriptText, callNumber, rowNumber);
       }
     } catch (error) {
       console.error("Failed to update sheet after call:", error.message);
