@@ -2890,18 +2890,25 @@ app.get("/api/analytics/drilldown", async (req, res) => {
 });
 
 // ── Live AI coaching tips ────────────────────────────────────────────────
-// While a call is in progress, we periodically ask the AI "is a coaching tip
-// worth showing right now?" - see checkForCoachingTip() further down. These
-// three constants are the dials to tune if it feels too chatty/slow/expensive.
+// While a call is in progress, we ask the AI "is a coaching tip worth
+// showing right now?" - see checkForCoachingTip() further down. The check is
+// now EVENT-DRIVEN: recordFinalLine() below calls it directly the instant a
+// new transcript line lands, so a tip-worthy moment doesn't have to wait for
+// a timer to notice it. COACHING_CHECK_INTERVAL_MS still runs a periodic
+// call too, purely as a BACKSTOP (e.g. if a check was skipped and nothing
+// else nudges it) - it's no longer the main way checks happen. These three
+// constants are the dials to tune if it feels too chatty/slow/expensive.
 
-// How often (in ms) we even CHECK for a tip. This is the main dial: lower =
-// more responsive coaching, but more AI calls (cost + rate-limit risk).
+// How often (in ms) the backstop timer checks for a tip, in case the
+// event-driven trigger in recordFinalLine() was ever missed.
 const COACHING_CHECK_INTERVAL_MS = 5000; // 5 seconds
 
 // Skip the AI call entirely if fewer than this many NEW transcript lines
 // have come in since the last check (e.g. the call has gone quiet) - no
-// point paying for an AI call when nothing new was said.
-const COACHING_MIN_NEW_LINES = 2;
+// point paying for an AI call when nothing new was said. 1 (not 2) so the
+// very first meaningful line can trigger a check instead of sitting unseen
+// until a second line arrives.
+const COACHING_MIN_NEW_LINES = 1;
 
 // How many of the most recent transcript lines to send the AI each check -
 // keeps each request small/cheap/fast, and keeps the AI focused on "what's
@@ -3399,9 +3406,19 @@ wss.on("connection", (ws) => {
   let linesSeenAtLastCoachingCheck = 0;
   // The most recent tip we showed, so we can tell the AI not to repeat it.
   let lastCoachingTip = null;
-  // True while a coaching AI call is in flight (including retries) - stops
-  // the next timer tick from starting an overlapping second request.
+  // True while a coaching AI call is in flight - stops the next trigger
+  // (timer tick OR a new transcript line - see recordFinalLine) from
+  // starting an overlapping second request. No retries happen on top of
+  // this call anymore (see generateCoachingTip in ai/index.js), so this is
+  // now a single request's actual round-trip, not a multi-attempt one.
   let coachingCheckInProgress = false;
+  // Set when a check was skipped because one was ALREADY in flight (see
+  // above) - instead of that tick just being lost (which used to silently
+  // halve the effective check cadence whenever the AI call ran long), the
+  // in-flight check's own `finally` below sees this flag and immediately
+  // runs one more check right after, using whatever new lines have arrived
+  // in the meantime.
+  let coachingRecheckQueued = false;
   // The setInterval handle for this call's periodic coaching checks, so we
   // can stop it once the call ends (see the "stop"/close handling below).
   let coachingIntervalHandle = null;
@@ -3412,14 +3429,22 @@ wss.on("connection", (ws) => {
     return trackLabels[track] || track;
   }
 
-  // Runs on a timer (COACHING_CHECK_INTERVAL_MS) while this call is active.
+  // Runs whenever a new final transcript line arrives (see recordFinalLine
+  // below - this is the main trigger now) AND on a timer
+  // (COACHING_CHECK_INTERVAL_MS, a backstop only - see its own comment).
   // Sends only the most recent slice of the transcript (COACHING_WINDOW_LINES)
   // to the AI and asks "is a coaching tip worth showing right now?" - most of
   // the time the answer is no, and nothing gets sent to the browser.
   async function checkForCoachingTip() {
-    // Don't overlap with a request that's still retrying, and don't bother
-    // if this call doesn't have a phone number yet (still starting up).
-    if (coachingCheckInProgress || !currentLeadPhone) return;
+    if (!currentLeadPhone) return; // still starting up, nothing to check yet
+
+    if (coachingCheckInProgress) {
+      // A check is already running - rather than just dropping this tick
+      // (which used to mean a slow AI call silently ate the next scheduled
+      // check too), remember to run one more the moment it finishes.
+      coachingRecheckQueued = true;
+      return;
+    }
 
     const allLines = callTranscripts.get(currentLeadPhone) || [];
     const newLinesCount = allLines.length - linesSeenAtLastCoachingCheck;
@@ -3447,6 +3472,14 @@ wss.on("connection", (ws) => {
       broadcastCoachingTip(tip, currentLeadPhone);
     } finally {
       coachingCheckInProgress = false;
+      // Something arrived while we were busy - go again right away instead
+      // of waiting for the next trigger (see coachingRecheckQueued above).
+      // Not awaited: this fires the next check and returns immediately, same
+      // fire-and-forget shape as every other caller of checkForCoachingTip.
+      if (coachingRecheckQueued) {
+        coachingRecheckQueued = false;
+        checkForCoachingTip();
+      }
     }
   }
 
@@ -3459,6 +3492,19 @@ wss.on("connection", (ws) => {
     const lines = callTranscripts.get(currentLeadPhone) || [];
     lines.push({ speaker: label, text: transcript });
     callTranscripts.set(currentLeadPhone, lines);
+
+    // Event-driven coaching trigger (the main responsiveness fix): react to
+    // THIS line immediately instead of waiting for the next backstop timer
+    // tick. checkForCoachingTip() is async but deliberately not awaited here -
+    // recordFinalLine is called synchronously from the Deepgram "message"
+    // handler (see openDeepgramConnection above), and must return right away
+    // so it never blocks the transcription/audio path. Safe to fire-and-forget:
+    // checkForCoachingTip() never throws (generateCoachingTip in ai/index.js
+    // catches its own errors and resolves to null), and its own
+    // COACHING_MIN_NEW_LINES/coachingCheckInProgress gating already makes it
+    // a no-op on lines that don't warrant a check, so calling it after every
+    // single line is cheap and never double-fires.
+    checkForCoachingTip();
   }
 
   // The first track to produce a real transcript is the rep (their mic is
@@ -3509,6 +3555,13 @@ wss.on("connection", (ws) => {
         // call (not on every coaching check) since it can't change mid-call.
         const callerEmail = data.start.customParameters && data.start.customParameters.callerEmail;
         currentCallerSellerContext = await getSellerContextForEmail(callerEmail);
+        // TEMPORARY diagnostic log - confirms whether seller context is
+        // actually reaching the live coaching prompt for a real call, and
+        // with what value. Remove once that's verified.
+        console.log(
+          `[coaching] seller context for ${callerEmail || "(no callerEmail)"}: ` +
+            (currentCallerSellerContext ? `"${currentCallerSellerContext}"` : "(empty)")
+        );
 
         // Fresh coaching state for this new call, and start its periodic tip
         // check running (see checkForCoachingTip above).

@@ -1,7 +1,8 @@
 // This is the "swappable AI provider" entry point. Everywhere else in the
 // app calls generateCallInsights() / generateRelationshipSummary() / etc
 // through this file, without knowing (or needing to know) which AI service
-// is actually behind it, or that retries happen at all.
+// is actually behind it, or that retries happen at all (generateCoachingTip
+// is the one exception - see its own comment below for why it never retries).
 //
 // To switch providers later (e.g. to Claude or OpenAI): write a new file
 // next to this one (e.g. claudeProvider.js) that exports the same functions
@@ -11,8 +12,9 @@
 // recentTranscript, lastTip, sellerContext), generateFollowUpSms(leadName,
 // transcript, aiNotes, sellerContext), and isRetryableError(error) - then
 // change the line below to point at that file instead. The retry behavior
-// below applies automatically to whichever provider is plugged in, since it
-// only depends on that provider's own isRetryableError() function.
+// below applies automatically to whichever provider is plugged in for the
+// three functions that use it, since it only depends on that provider's own
+// isRetryableError() function.
 //
 // sellerContext (every function above): the calling rep's own "sells
 // X to Y, aiming for Z" profile, already assembled into one plain-English
@@ -60,19 +62,19 @@ async function generateRelationshipSummary(previousSummary, latestTranscript, ca
 
 // Generates a live coaching tip for a call in progress, if the AI decides
 // one is warranted right now (see geminiProvider's REACTIVE-only rules).
-// Same retry + graceful-failure behavior as the calls above: returns null
-// (never throws) if every attempt fails, so a slow/failing AI call can never
-// disrupt the live call or its transcript - the rep just doesn't get a tip
-// that cycle, and the next periodic check tries again.
+// Deliberately NO retry here, unlike every other function in this file -
+// this runs in a real-time loop (see checkForCoachingTip in server.js), and
+// a tip that arrives late because we backed off and retried is worse than
+// just skipping this one check cycle. The next transcript line triggers
+// another check almost immediately anyway, so a single failed attempt is
+// cheap to just let go. Never throws (same graceful-failure shape as the
+// other functions here) - returns null if the one attempt fails, so a
+// flaky AI call can never disrupt the live call or its transcript.
 async function generateCoachingTip(recentTranscript, lastTip, sellerContext) {
   try {
-    return await withRetry(
-      () => provider.generateCoachingTip(recentTranscript, lastTip, sellerContext),
-      provider.isRetryableError,
-      "AI coaching tip"
-    );
+    return await provider.generateCoachingTip(recentTranscript, lastTip, sellerContext);
   } catch (error) {
-    console.error("AI coaching tip permanently failed:", error.message);
+    console.error("AI coaching tip failed (no retry - next transcript line will trigger another check):", error.message);
     return null;
   }
 }
