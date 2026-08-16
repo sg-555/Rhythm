@@ -17,12 +17,22 @@ const { google } = require("googleapis");
 const db = require("./db");
 
 // ── Google OAuth2 client ─────────────────────────────────────────────────
+// Derived from PUBLIC_BASE_URL (same as CALL_STATUS_CALLBACK_URL/
+// MEDIA_STREAM_URL in server.js) instead of its own separate env var - a
+// standalone GOOGLE_REDIRECT_URI could silently drift out of sync with
+// PUBLIC_BASE_URL (e.g. still pointing at an old Render URL after moving to
+// a custom domain), sending signed-in users back to the stale host for the
+// rest of their session. Must still be registered as an authorized redirect
+// URI for this OAuth client in the Google Cloud Console, or Google will
+// refuse it.
+const GOOGLE_OAUTH_REDIRECT_URI = `${process.env.PUBLIC_BASE_URL}/auth/google/callback`;
+
 // This is what talks to Google to build the sign-in URL and exchange the
 // one-time code Google sends back for real access/refresh tokens.
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+  GOOGLE_OAUTH_REDIRECT_URI
 );
 
 // The narrowest scopes that still let us create a Google Sheet for each
@@ -61,7 +71,7 @@ async function exchangeCodeForUser(code) {
   const authedClient = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    GOOGLE_OAUTH_REDIRECT_URI
   );
   authedClient.setCredentials(tokens);
 
@@ -579,7 +589,7 @@ function getUserOAuthClient(user) {
   const client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    GOOGLE_OAUTH_REDIRECT_URI
   );
 
   client.setCredentials({
