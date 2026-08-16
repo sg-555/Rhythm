@@ -3436,13 +3436,13 @@
         <div class="empty-leads-example-cell header">Name</div>
         <div class="empty-leads-example-cell header">Phone</div>
         <div class="empty-leads-example-cell">Aarav Sharma</div>
-        <div class="empty-leads-example-cell">91 98765 43210</div>
+        <div class="empty-leads-example-cell">98765 43210</div>
       `;
       panel.appendChild(example);
 
       const formatNote = document.createElement("p");
       formatNote.innerHTML =
-        "Always include the country code (e.g. <strong>91</strong> for India, <strong>1</strong> for the US) - without it, calls can't be placed. Don't type a leading <strong>+</strong> - Google Sheets reads it as a formula.";
+        "Enter phone numbers as digits only (e.g. 9819876680). Don't start with a <strong>+</strong> — Google Sheets reads it as a formula.";
       panel.appendChild(formatNote);
 
       if (currentUserSheetId) {
