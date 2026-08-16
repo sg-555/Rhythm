@@ -151,17 +151,38 @@ function updateWorkspaceLayout() {
       return (phone || "").replace(/\D/g, "");
     }
 
+    // Same INDIA-ONLY shape-guessing as toE164() in server.js, kept here as
+    // its own self-contained copy for the same reason normalizePhoneForCallMatch
+    // above is: two numbers that DIAL the same (e.g. "9819876680" and
+    // "09819876680", both +919819876680) must collide here too, or the
+    // picker below misses a real duplicate. Falls back to the plain
+    // digit-only string (instead of null) for anything toE164 wouldn't
+    // recognize, so an unparseable number still compares equal to an
+    // identical unparseable number rather than being silently dropped from
+    // duplicate detection entirely.
+    function toE164ForCallMatch(phone) {
+      const digits = normalizePhoneForCallMatch(phone);
+      if (digits.length === 10) return "+91" + digits;
+      if (digits.length === 11 && digits.startsWith("0")) return "+91" + digits.slice(1);
+      if (digits.length === 12 && digits.startsWith("91")) return "+" + digits;
+      return digits;
+    }
+
     // Finds every OTHER lead in allLeads that shares this exact phone number
     // (itself included) - used to catch the "two leads, one phone number"
     // case BEFORE a real call is placed, since our backend can't tell those
     // rows apart by phone number alone (see findLeadRow() in server.js).
+    // Compares the DIALED (E.164) form, not the raw digits, so two leads
+    // whose numbers normalize to the same E.164 number - e.g. "09819876680"
+    // and "9819876680" - are correctly caught as duplicates even though
+    // they're typed differently in the sheet.
     // Returns the full list of colliding leads (length 1 = no collision).
     // Demo mode never calls this - the seeded demo sheets can't develop
     // duplicate phone numbers the way a rep's real Google Sheet can.
     function findDuplicateLeadsForPhone(phone) {
-      const normalized = normalizePhoneForCallMatch(phone);
+      const normalized = toE164ForCallMatch(phone);
       if (!normalized) return [];
-      return (allLeads || []).filter((lead) => normalizePhoneForCallMatch(lead.Phone) === normalized);
+      return (allLeads || []).filter((lead) => toE164ForCallMatch(lead.Phone) === normalized);
     }
 
     // Opens the connection to our backend's live transcript feed. Called
@@ -513,7 +534,16 @@ function updateWorkspaceLayout() {
           "background:var(--bg-surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-panel);" +
           "padding:var(--sp-5);max-width:420px;width:100%;box-sizing:border-box;";
 
-        const names = candidates.map((lead) => lead.Name || "an unnamed lead");
+        // Row number is appended to EVERY candidate's label, not just
+        // repeated names - if two duplicates happen to have different
+        // names this is still useful context, and picking it based on
+        // whether names collide would make the picker's wording change
+        // depending on data the rep can't see at a glance.
+        const describeLead = (lead) => {
+          const name = lead.Name || "an unnamed lead";
+          return lead.RowNumber ? `${name} (row ${lead.RowNumber})` : name;
+        };
+        const names = candidates.map(describeLead);
         const message = document.createElement("p");
         message.style.cssText = "margin:0 0 var(--sp-4) 0;color:var(--ink);font-size:var(--text-body);line-height:1.5;";
         message.textContent = `This number is on ${candidates.length} leads: ${joinLeadNames(names)}. Which one are you calling?`;
@@ -535,7 +565,7 @@ function updateWorkspaceLayout() {
         candidates.forEach((lead) => {
           const button = document.createElement("button");
           button.type = "button";
-          button.textContent = lead.Name || "Unnamed lead";
+          button.textContent = describeLead(lead);
           button.style.cssText =
             "background:var(--interactive);color:var(--on-interactive);border:none;font-weight:600;" +
             "font-size:0.95rem;padding:var(--sp-2) var(--sp-4);border-radius:var(--radius-sm);cursor:pointer;";
