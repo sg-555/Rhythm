@@ -1501,6 +1501,26 @@ function updateWorkspaceLayout() {
       return container;
     }
 
+    // "Previous Calls" is deliberately left blank on the sheet until the
+    // SECOND call (see updateRelationshipHistory() in server.js - callNumber
+    // <= 1 is a no-op there, since there's no relationship to summarize off
+    // just one call). That means an empty lead.previousCalls is ambiguous by
+    // itself - it reads the same whether this lead has never been called at
+    // all, or was just called once - so we branch on Attempts to tell those
+    // two states apart instead of showing one static fallback for both.
+    function describePreviousCalls(lead) {
+      if (lead.previousCalls) return lead.previousCalls;
+
+      const attempts = parseInt(lead.attempts, 10) || 0;
+      if (attempts === 0) return "This lead hasn't been called yet.";
+      if (attempts === 1) return "This is your first call — previous call history will appear here after your next call.";
+      // attempts >= 2 with no previousCalls text yet: the relationship
+      // summary write is best-effort (see updateRelationshipHistory's own
+      // try/catch) and can occasionally fail/lag behind - fall back to the
+      // original generic message rather than claiming "first call" again.
+      return "No call history yet.";
+    }
+
     function renderLeadPanel(lead) {
       panelContent.innerHTML = ""; // clear the "Loading..." placeholder
 
@@ -1512,7 +1532,7 @@ function updateWorkspaceLayout() {
 
       const previousCalls = document.createElement("p");
       previousCalls.className = "previous-calls-text";
-      previousCalls.textContent = lead.previousCalls || "No call history yet.";
+      previousCalls.textContent = describePreviousCalls(lead);
       panelContent.appendChild(makeSection("Previous Calls", previousCalls));
 
       panelContent.appendChild(makeSection("Suggested Stage", renderSuggestedStageSection(lead)));
