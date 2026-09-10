@@ -4126,6 +4126,18 @@
       try {
         const response = await fetch("/api/onboarding/create-sheet", { method: "POST" });
         const data = await response.json();
+
+        // Same reauthRequired shape as loadLeads() above - most commonly
+        // hit here by someone who unchecked Drive access on the consent
+        // screen, so the stored token can't create a sheet. Sending them
+        // back through /auth/google (which sets prompt: consent) lets them
+        // re-grant it instead of dead-ending on a generic error.
+        if (response.status === 401 && data && data.reauthRequired) {
+          createSheetStatus.textContent = "Your Google connection needs Drive access - redirecting to sign in...";
+          location.href = "/auth/google";
+          return;
+        }
+
         if (!response.ok) throw new Error(data.error || "Could not create a sheet.");
 
         renderOnboardingSuccess(data.sheetId);

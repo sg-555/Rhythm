@@ -547,13 +547,30 @@ async function getSheetsContextForEmail(email) {
   return getSheetsContextForUser(user);
 }
 
+// True if a Google API error is specifically the "granted token doesn't
+// cover Drive/Sheets" case - e.g. the user unchecked the Drive permission
+// on the consent screen. Google reports this as 403 with either the message
+// or the error reason naming insufficient scopes, distinct from a 403 caused
+// by the file genuinely not being shared with this account.
+function isInsufficientScopeError(error) {
+  const status = error.code || (error.response && error.response.status);
+  if (status !== 403) return false;
+  if (/insufficient authentication scopes/i.test(error.message || "")) return true;
+  const nestedErrors = (error.errors || (error.response && error.response.data && error.response.data.error && error.response.data.error.errors)) || [];
+  return nestedErrors.some((e) => e && e.reason === "ACCESS_TOKEN_SCOPE_INSUFFICIENT");
+}
+
 // True if a Google API error looks like an auth failure (expired/revoked
-// token) rather than some other problem (e.g. a sheet genuinely missing a
-// column). Used by handleSheetsError to decide whether "sign in again" is
-// the right message.
+// token, or a token missing the Drive/Sheets scope) rather than some other
+// problem (e.g. a sheet genuinely missing a column). Used by
+// handleSheetsError to decide whether "sign in again" is the right message.
 function isGoogleAuthError(error) {
   const status = error.code || (error.response && error.response.status);
-  return status === 401 || /invalid_grant|invalid_token|No refresh token/i.test(error.message || "");
+  return (
+    status === 401 ||
+    /invalid_grant|invalid_token|No refresh token/i.test(error.message || "") ||
+    isInsufficientScopeError(error)
+  );
 }
 
 // Shared by every route that resolves a Sheets context: turns whatever went
