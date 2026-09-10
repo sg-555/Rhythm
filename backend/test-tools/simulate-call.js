@@ -4,11 +4,6 @@
 // relationship summary) by running this 2-3 times in a row for the same
 // phone number, instead of placing 2-3 real calls.
 //
-// Mirrors /voice's actual shape: TWO separate /media-stream connections
-// (one per leg), each sending its own "role" custom parameter, sharing one
-// callSessionId - see server.js's /voice handler and its "start" handler
-// for the real thing this is standing in for.
-//
 // Usage:
 //   node test-tools/simulate-call.js "<phone>" "<rep line>" "<lead line>"
 //
@@ -57,42 +52,10 @@ function textToMulaw(text, tmpFileName) {
   return Buffer.concat([speech, trailingSilence]);
 }
 
-// Opens one leg's /media-stream connection and sends its "connected" +
-// "start" events, exactly like Twilio would for a stream carrying only
-// that leg's inbound_track. `role` ("rep"/"lead") and `callSessionId` are
-// the two custom parameters the real fix's whole determinism rests on -
-// see /voice in server.js.
-function openLegConnection(role, callSessionId, phone) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket("ws://localhost:3000/media-stream");
-    const callSid = `CAsim-${role}-${Date.now()}`;
-
-    ws.on("open", () => {
-      ws.send(JSON.stringify({ event: "connected", protocol: "Call", version: "1.0.0" }));
-      ws.send(
-        JSON.stringify({
-          event: "start",
-          start: {
-            callSid,
-            customParameters: { leadPhone: phone, callerEmail: "", role, callSessionId },
-          },
-        })
-      );
-      resolve(ws);
-    });
-
-    ws.on("error", (error) => reject(error));
-  });
-}
-
-// Sends one leg's audio to its WebSocket in real-time-sized 20ms chunks,
-// starting after `delayMs` (so the two legs can be staggered like a real
+// Sends one track's audio to the WebSocket in real-time-sized 20ms chunks,
+// starting after `delayMs` (so the two tracks can be staggered like a real
 // call, where the rep speaks first and the lead answers a moment later).
-// `track` is just what real Twilio would label it ("inbound", since every
-// stream now requests track: "inbound_track") - the server no longer reads
-// this field at all (each connection has exactly one Deepgram connection),
-// it's included only for realism.
-function sendTrack(ws, audio, delayMs) {
+function sendTrack(ws, audio, track, delayMs) {
   setTimeout(() => {
     const chunkSize = 160; // 20ms of audio at 8000Hz, 1 byte/sample
     let offset = 0;
@@ -102,7 +65,7 @@ function sendTrack(ws, audio, delayMs) {
         return;
       }
       const chunk = audio.slice(offset, offset + chunkSize);
-      ws.send(JSON.stringify({ event: "media", media: { track: "inbound", payload: chunk.toString("base64") } }));
+      ws.send(JSON.stringify({ event: "media", media: { track, payload: chunk.toString("base64") } }));
       offset += chunkSize;
     }, 20);
   }, delayMs);
@@ -114,45 +77,44 @@ function sendTrack(ws, audio, delayMs) {
   console.log(`Generating speech audio for lead line: "${leadLine}"`);
   const leadAudio = textToMulaw(leadLine, "simulate-call-lead.wav");
 
-  const callSessionId = "CAsim-session-" + Date.now();
+  const ws = new WebSocket("ws://localhost:3000/media-stream");
 
-  let repWs;
-  let leadWs;
-  try {
-    [repWs, leadWs] = await Promise.all([
-      openLegConnection("rep", callSessionId, phone),
-      openLegConnection("lead", callSessionId, phone),
-    ]);
-  } catch (error) {
+  ws.on("open", async () => {
+    const callSid = "CAsim" + Date.now();
+    console.log(`Streaming simulated call ${callSid} to /media-stream...`);
+
+    ws.send(JSON.stringify({ event: "connected", protocol: "Call", version: "1.0.0" }));
+    ws.send(JSON.stringify({ event: "start", start: { callSid, customParameters: { leadPhone: phone } } }));
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Rep speaks first (from the start); lead "answers" a beat later.
+    const repDurationMs = (repAudio.length / 8000) * 1000;
+    sendTrack(ws, repAudio, "inbound", 0);
+    sendTrack(ws, leadAudio, "outbound", repDurationMs + 500);
+
+    // Wait for both tracks to finish playing, plus buffer time for Deepgram
+    // to finalize, before ending the stream.
+    const totalAudioMs = repDurationMs + (leadAudio.length / 8000) * 1000;
+    await new Promise((resolve) => setTimeout(resolve, totalAudioMs + 4000));
+
+    ws.send(JSON.stringify({ event: "stop" }));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    ws.close();
+
+    console.log("Media stream finished - triggering /call-status (as Twilio would when the call ends)...");
+    const response = await fetch("http://localhost:3000/call-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `To=${encodeURIComponent(phone)}&CallStatus=completed`,
+    });
+    console.log("call-status response:", await response.text());
+    console.log("Done! Check the Google Sheet and the server's terminal log.");
+  });
+
+  ws.on("error", (error) => {
     console.error("Could not connect to ws://localhost:3000/media-stream - is the server running?");
     console.error(error.message);
     process.exit(1);
-  }
-
-  console.log(`Streaming simulated call (session ${callSessionId}) to /media-stream...`);
-
-  // Rep speaks first (from the start); lead "answers" a beat later.
-  const repDurationMs = (repAudio.length / 8000) * 1000;
-  sendTrack(repWs, repAudio, 0);
-  sendTrack(leadWs, leadAudio, repDurationMs + 500);
-
-  // Wait for both legs to finish playing, plus buffer time for Deepgram to
-  // finalize, before ending the stream.
-  const totalAudioMs = repDurationMs + (leadAudio.length / 8000) * 1000;
-  await new Promise((resolve) => setTimeout(resolve, totalAudioMs + 4000));
-
-  repWs.send(JSON.stringify({ event: "stop" }));
-  leadWs.send(JSON.stringify({ event: "stop" }));
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  repWs.close();
-  leadWs.close();
-
-  console.log("Media stream finished - triggering /call-status (as Twilio would when the call ends)...");
-  const response = await fetch("http://localhost:3000/call-status", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `To=${encodeURIComponent(phone)}&CallStatus=completed`,
   });
-  console.log("call-status response:", await response.text());
-  console.log("Done! Check the Google Sheet and the server's terminal log.");
 })();
