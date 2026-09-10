@@ -1408,23 +1408,32 @@ const MEDIA_STREAM_URL = `${process.env.PUBLIC_BASE_URL.replace(/^https:\/\//, "
 // below to open a live transcription connection for each call.
 const deepgramClient = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
 
-// ── Figuring out which track is the Rep and which is the Lead ──────────
+// ── Figuring out which leg is the Rep and which is the Lead ────────────
 //
-// You'd expect Twilio's "inbound" / "outbound" track names to always mean
-// the same speaker, but in testing they didn't - the same call setup
-// (browser -> /voice -> <Start><Stream> -> <Dial><Number>) produced
-// "inbound = rep" on some calls and "inbound = lead" on others. Twilio's own
-// docs define inbound/outbound only as "audio Twilio received" vs "audio
-// Twilio sent" on this leg - that's a plumbing detail, not a promise about
-// which human is on which side, so a fixed inbound->Rep mapping can never
-// be reliable.
+// You'd expect Twilio's "inbound" / "outbound" track names on a single
+// bridged stream to always mean the same speaker, but in testing they
+// didn't - the same call setup produced "inbound = rep" on some calls and
+// "inbound = lead" on others. Twilio's own docs define inbound/outbound
+// only as "audio Twilio received" vs "audio Twilio sent" on a leg - that's
+// a plumbing detail, not a promise about which human is on which side. A
+// "whoever speaks first" heuristic (tried before this) isn't reliable
+// either - it mislabels any call where the lead happens to say something
+// before the rep's audio registers.
 //
-// Instead of guessing, we work it out fresh for every call using one fact
-// that's always true for how we place calls: the rep's microphone is live
-// from the moment the call starts, but the lead's line is completely silent
-// until Twilio finishes dialing them and they pick up. So: whichever track
-// produces the FIRST real piece of speech is the rep - every time, no
-// matter what Twilio happened to label it. See assignSpeakerLabels() below.
+// So instead of inferring from either track names or timing, each leg gets
+// its OWN separate Media Stream, explicitly told which role it is via a
+// "role" custom parameter we set ourselves:
+//   - The REP (parent/browser) leg: a normal <Start><Stream> in /voice's
+//     TwiML response, same as always.
+//   - The LEAD (dialed-out) leg: TwiML has no way to express "stream just
+//     this one leg of a <Dial>" - confirmed against Twilio's own <Dial>/
+//     <Number> docs, which document no nested <Stream> child anywhere.
+//     Instead, /call-status attaches a stream to the lead's own CallSid
+//     via the REST API (POST /Calls/{CallSid}/Streams.json) as soon as it
+//     learns that CallSid - see attachLeadStream() and /call-status's
+//     "initiated" branch below.
+// Either way, /media-stream's "start" handler just reads role straight off
+// data.start.customParameters.role - no inference, in either direction.
 
 // Turns a Twilio call's final status into the human-readable value we store
 // in the "Last outcome" column. Twilio doesn't have a single "invalid number"
@@ -2188,11 +2197,18 @@ function buildGreetingTwiml() {
 // can no longer reconcile the two. rawPhone is what lets /call-status use
 // the ORIGINAL phone for every matching/lookup purpose instead - see its
 // own comment for the full list of what that fixes.
-function withCallerEmail(url, callerEmail, leadRowNumber, rawPhone) {
+function withCallerEmail(url, callerEmail, leadRowNumber, rawPhone, callSessionId) {
   const params = new URLSearchParams();
   if (callerEmail) params.set("callerEmail", callerEmail);
   if (leadRowNumber) params.set("leadRowNumber", leadRowNumber);
   if (rawPhone) params.set("rawPhone", rawPhone);
+  // The PARENT call's CallSid (see /voice) - threaded through so /call-
+  // status's "initiated" branch can stamp it as the "callSessionId" custom
+  // parameter on the lead's REST-attached stream, letting /media-stream
+  // recognize the rep's and lead's connections as the same call. Only ever
+  // set by /voice's dial.number() call site below - placeCall()'s calls
+  // don't stream at all, so it's simply omitted there.
+  if (callSessionId) params.set("callSessionId", callSessionId);
   const query = params.toString();
   return query ? `${url}?${query}` : url;
 }
@@ -2363,13 +2379,23 @@ app.post("/voice", validateTwilioRequest, (req, res) => {
   const response = new twilio.twiml.VoiceResponse();
 
   if (to) {
-    // <Start><Stream> tells Twilio to also send us the call's live audio over
-    // a WebSocket, WITHOUT interrupting the actual call - the two people on
-    // the call keep talking normally while this streams in the background.
-    // track: "both_tracks" makes Twilio send the rep's and lead's audio as
-    // two separate, labeled tracks instead of one blended stream.
+    // This call's own CallSid (Twilio sends it on every voice webhook,
+    // including this one) - the one stable ID that can tie the rep's and
+    // lead's streams together as "the same call" even though they're two
+    // separate Media Stream connections opened at different times through
+    // different mechanisms (see the design-rationale comment above
+    // MEDIA_STREAM_URL). Threaded through as both streams' "callSessionId"
+    // custom parameter.
+    const callSessionId = req.body.CallSid || "";
+
+    // <Start><Stream> tells Twilio to also send us this (rep/parent) leg's
+    // live audio over a WebSocket, WITHOUT interrupting the actual call -
+    // the two people on the call keep talking normally while this streams
+    // in the background. track: "inbound_track" is audio Twilio received
+    // FROM this leg's one human party - unambiguously the rep, since this
+    // leg has no other party on it (see the design-rationale comment above).
     const start = response.start();
-    const stream = start.stream({ url: MEDIA_STREAM_URL, track: "both_tracks" });
+    const repStream = start.stream({ url: MEDIA_STREAM_URL, track: "inbound_track" });
 
     // Passes the lead's phone number into the media stream as a custom
     // parameter, so /media-stream knows which lead this call's transcript
@@ -2379,26 +2405,34 @@ app.post("/voice", validateTwilioRequest, (req, res) => {
     // frontend matches against activeCallPhone, which is ALSO the raw
     // number (see startRealCall() in shared-lead-panel.js) - "to" is only
     // ever for the actual Twilio dial below, never for matching.
-    stream.parameter({ name: "leadPhone", value: rawTo });
+    repStream.parameter({ name: "leadPhone", value: rawTo });
 
     // Same idea, for the CALLER's email - lets /media-stream look up this
     // rep's seller-context profile (see getSellerContextForEmail() below)
     // to personalize live coaching tips. May be empty (a call placed some
     // other way) - getSellerContextForEmail("") just returns "" too, same
     // as no profile filled in, so coaching simply stays generic.
-    stream.parameter({ name: "callerEmail", value: callerEmail });
+    repStream.parameter({ name: "callerEmail", value: callerEmail });
+    repStream.parameter({ name: "role", value: "rep" });
+    repStream.parameter({ name: "callSessionId", value: callSessionId });
 
     const dial = response.dial({ callerId: process.env.TWILIO_FROM_NUMBER });
 
-    // Tells Twilio to notify our /call-status endpoint once this call
-    // finishes - with callerEmail, leadRowNumber (if we have one), and
-    // rawTo carried through the URL itself, since Twilio's status callback
-    // request won't have our session cookie (and its own "To" field will
-    // only ever have the E.164 DIALED number, not this original one).
+    // Tells Twilio to notify our /call-status endpoint at "initiated"
+    // (fired the instant Twilio starts dialing the lead, well before
+    // ringing/answer - see attachLeadStream()'s own comment) AND
+    // "completed" (the original, only-ever-purpose of this callback) -
+    // with callerEmail, leadRowNumber (if we have one), rawTo, and now
+    // callSessionId all carried through the URL itself, since Twilio's
+    // status callback request won't have our session cookie (and its own
+    // "To" field will only ever have the E.164 DIALED number, not this
+    // original one). /call-status's own top-of-handler guard is what keeps
+    // the new "initiated" event from ever reaching the existing
+    // completed-only logic below it - see its comment.
     dial.number(
       {
-        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail, leadRowNumber, rawTo),
-        statusCallbackEvent: ["completed"],
+        statusCallback: withCallerEmail(CALL_STATUS_CALLBACK_URL, callerEmail, leadRowNumber, rawTo, callSessionId),
+        statusCallbackEvent: ["initiated", "completed"],
         statusCallbackMethod: "POST",
       },
       to
@@ -2430,6 +2464,17 @@ app.post("/voice", validateTwilioRequest, (req, res) => {
 // the lead's (normalized) phone number. /media-stream fills this in as the
 // call happens; /call-status below reads it once the call ends.
 const callTranscripts = new Map();
+
+// One entry per call currently in progress, keyed by the callSessionId
+// /voice mints (its own CallSid) and stamps on BOTH of that call's two
+// media streams (rep leg + lead leg - see /voice and attachLeadStream()
+// below). Each leg opens its OWN WebSocket connection to /media-stream, so
+// anything that must happen exactly once per CALL rather than once per
+// CONNECTION - specifically the live-coaching loop - lives here instead of
+// in either connection's own closure. Created when the first of a call's
+// two connections sends its "start" event, and torn down once BOTH have
+// ended - see getOrCreateCallSession()/releaseCallSession() below.
+const callSessions = new Map();
 
 // ── Per-call log (the data behind the Analytics dashboard) ──────────────
 // call-history.json above is keyed PER LEAD and only gets an entry when the
@@ -2932,12 +2977,87 @@ const COACHING_MIN_NEW_LINES = 1;
 // happening right now" rather than re-reading the whole call so far.
 const COACHING_WINDOW_LINES = 12;
 
-// POST /call-status: Twilio sends a request here once a call finishes.
+// Attaches a SECOND, lead-leg-only Media Stream to the lead's own call, via
+// Twilio's REST API (POST /Calls/{CallSid}/Streams.json) - the only
+// supported way to stream just one leg of a <Dial>, since nested <Stream>
+// inside <Dial>/<Number> isn't valid TwiML (confirmed against Twilio's own
+// docs - see the design-rationale comment above MEDIA_STREAM_URL). Called
+// from /call-status's "initiated" branch below, which fires the instant
+// Twilio starts dialing the lead - before ringing, well before the lead
+// could possibly answer and start talking, so there's a comfortable buffer
+// for this REST round-trip to land before there's any audio to miss.
+//
+// UNVERIFIED until a real call proves it either way: whether Twilio's
+// Streams API accepts attaching to a call this early (still queued/
+// ringing) or requires it to already be "in-progress" (answered). That's
+// exactly what the success/failure log below is for.
+//
+// Never throws - a failed attach just means THIS call has no lead-side
+// transcript; the call itself proceeds completely normally either way (see
+// the try/catch below).
+async function attachLeadStream(req) {
+  // This is the CHILD leg's own CallSid - /call-status's statusCallback is
+  // registered on dial.number() (see /voice), so req.body.CallSid here is
+  // the dialed-out (lead) leg, distinct from the parent/rep leg's CallSid
+  // that /voice read as callSessionId.
+  const childCallSid = req.body.CallSid;
+  const rawPhone = req.query.rawPhone || req.body.To || "";
+  const callerEmail = req.query.callerEmail || "";
+  const callSessionId = req.query.callSessionId || "";
+
+  if (!childCallSid) {
+    console.error("attachLeadStream: no CallSid on the status callback body - can't attach a stream.");
+    return;
+  }
+
+  try {
+    const stream = await twilioClient.calls(childCallSid).streams.create({
+      url: MEDIA_STREAM_URL,
+      track: "inbound_track",
+      "parameter1.name": "role",
+      "parameter1.value": "lead",
+      "parameter2.name": "leadPhone",
+      "parameter2.value": rawPhone,
+      "parameter3.name": "callerEmail",
+      "parameter3.value": callerEmail,
+      "parameter4.name": "callSessionId",
+      "parameter4.value": callSessionId,
+    });
+    console.log(
+      `Lead stream attach SUCCEEDED for call ${childCallSid} (session ${callSessionId || "(none)"}) - stream SID ${stream.sid}`
+    );
+  } catch (error) {
+    console.error(
+      `Lead stream attach FAILED for call ${childCallSid} (session ${callSessionId || "(none)"}):`,
+      error.message
+    );
+  }
+}
+
+// POST /call-status: Twilio sends a request here once a call finishes -
+// AND NOW ALSO the instant it starts dialing the lead (see /voice's
+// dial.number statusCallbackEvent: ["initiated", "completed"]). The guard
+// immediately below is what keeps that new "initiated" event from ever
+// reaching the rest of this handler: everything from the destructuring of
+// `To`/`CallStatus`/etc. onward is the ORIGINAL completed-only logic,
+// completely untouched by this change.
 // We read the outcome, map it to a friendly label, update the sheet, and
 // (if we captured a transcript) generate AI insights for the call.
 // validateTwilioRequest (above) is what makes it safe to trust callerEmail
 // below - without it, anyone who found this URL could claim to be any user.
 app.post("/call-status", validateTwilioRequest, async (req, res) => {
+  // Any event other than "completed" (in practice, just "initiated" - see
+  // /voice) is the lead leg just starting to dial, not the call finishing -
+  // attach the lead's stream and stop here, before any of the
+  // completed-only logic below even looks at the request. Logs the FULL
+  // body so the actual CallStatus value Twilio sends for "initiated" is
+  // visible (never documented explicitly, so this is how we confirm it).
+  if (req.body.CallStatus !== "completed") {
+    console.log("Call status callback for a non-completed event - full body:", JSON.stringify(req.body));
+    await attachLeadStream(req);
+    return res.sendStatus(200);
+  }
+
   const { To, CallStatus, SipResponseCode, CallDuration } = req.body;
   // Twilio calls this endpoint directly, server-to-server - there's no
   // browser session/cookie here at all, so the signed-in rep's email was
@@ -3306,23 +3426,20 @@ function broadcastCallOutcome(phone, outcome, connected) {
   }
 }
 
-// Opens a live transcription connection to Deepgram for ONE track (one
-// side of the call). Twilio sends us mulaw-encoded audio at 8000 Hz, mono -
-// we tell Deepgram exactly that so it can decode the audio correctly.
+// Opens a live transcription connection to Deepgram for ONE leg's audio.
+// Twilio sends us mulaw-encoded audio at 8000 Hz, mono - we tell Deepgram
+// exactly that so it can decode the audio correctly.
 //
-// `track` is Twilio's raw track name ("inbound" or "outbound") - we log with
-// this until we know who it actually is.
+// `label` is "Rep" or "Lead" - fixed for the lifetime of this connection
+// (see /voice's and attachLeadStream()'s "role" custom parameter, and the
+// "start" handler below, which decides it deterministically before this is
+// even called - there is no guessing here).
 // `phone` is THIS call's lead phone number - stamped onto every broadcast
 // transcript line so the right browser (and only the right browser) shows
 // it - see broadcastTranscriptLine()'s own comment for why that matters.
-// `getLabel` is a function we call to look up the current Rep/Lead label for
-// this track (it starts out unknown and gets filled in dynamically - see
-// assignSpeakerLabels below).
-// `onSpeech` is called every time this track produces a real transcript, so
-// the caller can notice "someone just spoke" and assign labels if needed.
-// `onFinalLine` is called with the finished "Rep: ..."/"Lead: ..." line each
-// time a FINAL result comes in, so the caller can save it for AI insights.
-async function openDeepgramConnection(track, phone, getLabel, onSpeech, onFinalLine) {
+// `onFinalLine` is called with the finished transcript text each time a
+// FINAL result comes in, so the caller can save it for AI insights.
+async function openDeepgramConnection(label, phone, onFinalLine) {
   try {
     const connection = await deepgramClient.listen.v1.connect({
       model: "nova-2-phonecall", // a model tuned specifically for phone call audio
@@ -3333,7 +3450,7 @@ async function openDeepgramConnection(track, phone, getLabel, onSpeech, onFinalL
     });
 
     connection.on("open", () => {
-      console.log(`Deepgram (${track} track): connection opened`);
+      console.log(`Deepgram (${label}): connection opened`);
     });
 
     // Deepgram sends us transcription results here as speech is recognized.
@@ -3342,9 +3459,6 @@ async function openDeepgramConnection(track, phone, getLabel, onSpeech, onFinalL
 
       const transcript = message.channel.alternatives[0].transcript;
       if (!transcript) return; // Deepgram sometimes sends empty results - ignore those
-
-      onSpeech(track); // makes sure this track (and the other one) has a label by now
-      const label = getLabel(track);
 
       if (message.is_final) {
         console.log(`${label}: ${transcript}`);
@@ -3358,11 +3472,11 @@ async function openDeepgramConnection(track, phone, getLabel, onSpeech, onFinalL
     });
 
     connection.on("error", (error) => {
-      console.error(`Deepgram (${track} track) error:`, error.message);
+      console.error(`Deepgram (${label}) error:`, error.message);
     });
 
     connection.on("close", () => {
-      console.log(`Deepgram (${track} track): connection closed`);
+      console.log(`Deepgram (${label}): connection closed`);
     });
 
     // .connect() opens the actual socket; waitForOpen() waits until it's ready
@@ -3371,172 +3485,188 @@ async function openDeepgramConnection(track, phone, getLabel, onSpeech, onFinalL
 
     return connection;
   } catch (error) {
-    console.error(`Failed to open Deepgram connection for ${track} track:`, error.message);
+    console.error(`Failed to open Deepgram connection for ${label}:`, error.message);
     return null;
   }
 }
 
-// Closes every open Deepgram connection for a call (one per track).
-function closeTrackConnections(trackConnections) {
-  for (const track of Object.keys(trackConnections)) {
-    if (trackConnections[track]) {
-      trackConnections[track].close();
-      trackConnections[track] = null;
+// Runs whenever a new final transcript line arrives for this call (see
+// recordFinalLine below - the main trigger) AND on a timer
+// (COACHING_CHECK_INTERVAL_MS, a backstop only - see its own comment).
+// Sends only the most recent slice of the transcript (COACHING_WINDOW_LINES)
+// to the AI and asks "is a coaching tip worth showing right now?" - most of
+// the time the answer is no, and nothing gets sent to the browser.
+//
+// Takes the call's shared `session` object (see callSessions above)
+// directly, rather than reading closure state - a call now has TWO
+// connections (rep leg + lead leg), and this must behave identically no
+// matter which one's transcript line triggered it, so all of its state
+// lives on the session, not on either connection.
+async function checkForCoachingTip(session) {
+  if (session.coachingCheckInProgress) {
+    // A check is already running - rather than just dropping this tick
+    // (which used to mean a slow AI call silently ate the next scheduled
+    // check too), remember to run one more the moment it finishes.
+    session.coachingRecheckQueued = true;
+    return;
+  }
+
+  const allLines = callTranscripts.get(session.leadPhone) || [];
+  const newLinesCount = allLines.length - session.linesSeenAtLastCoachingCheck;
+
+  // Not enough new conversation since last time - skip the AI call
+  // entirely (e.g. the line has gone quiet, or only one short reply).
+  if (newLinesCount < COACHING_MIN_NEW_LINES) return;
+
+  session.coachingCheckInProgress = true;
+  session.linesSeenAtLastCoachingCheck = allLines.length;
+
+  try {
+    const recentLines = allLines.slice(-COACHING_WINDOW_LINES);
+    const recentText = transcriptLinesToText(recentLines);
+
+    const tip = await generateCoachingTip(recentText, session.lastCoachingTip, session.sellerContext);
+    if (!tip) return; // the common case - AI decided nothing was worth flagging
+
+    // Defensive check: even though the prompt tells the AI not to repeat
+    // the last tip, don't trust it blindly - never show the exact same
+    // tip twice in a row.
+    if (tip.trim() === (session.lastCoachingTip || "").trim()) return;
+
+    session.lastCoachingTip = tip;
+    broadcastCoachingTip(tip, session.leadPhone);
+  } finally {
+    session.coachingCheckInProgress = false;
+    // Something arrived while we were busy - go again right away instead
+    // of waiting for the next trigger (see coachingRecheckQueued above).
+    // Not awaited: this fires the next check and returns immediately, same
+    // fire-and-forget shape as every other caller of checkForCoachingTip.
+    if (session.coachingRecheckQueued) {
+      session.coachingRecheckQueued = false;
+      checkForCoachingTip(session);
     }
+  }
+}
+
+// Saves one finished transcript line for this call, so the full transcript
+// is ready by the time /call-status needs it. Stored as { speaker, text }
+// objects (not pre-joined strings) so the same data can be turned into
+// plain text (for the AI prompt) OR saved as JSON (for testing) as needed.
+function recordFinalLine(session, label, transcript) {
+  const lines = callTranscripts.get(session.leadPhone) || [];
+  lines.push({ speaker: label, text: transcript });
+  callTranscripts.set(session.leadPhone, lines);
+
+  // Event-driven coaching trigger (the main responsiveness fix): react to
+  // THIS line immediately instead of waiting for the next backstop timer
+  // tick. checkForCoachingTip() is async but deliberately not awaited here -
+  // recordFinalLine is called synchronously from the Deepgram "message"
+  // handler (see openDeepgramConnection above), and must return right away
+  // so it never blocks the transcription/audio path. Safe to fire-and-forget:
+  // checkForCoachingTip() never throws (generateCoachingTip in ai/index.js
+  // catches its own errors and resolves to null), and its own
+  // COACHING_MIN_NEW_LINES/coachingCheckInProgress gating already makes it
+  // a no-op on lines that don't warrant a check, so calling it after every
+  // single line is cheap and never double-fires.
+  checkForCoachingTip(session);
+}
+
+// Looks up the shared session for a call, creating it the first time either
+// of its two connections (rep leg / lead leg) reports a "start" - whichever
+// gets there first. `sellerContext` is only used on that first call (it's
+// identical either way, since /voice and attachLeadStream() both stamp the
+// same callerEmail) - later callers just join the existing session.
+//
+// `activeConnections` tracks how many of this call's connections are still
+// open, so releaseCallSession() below only tears the session down once
+// BOTH have ended, never after just the first.
+function getOrCreateCallSession(callSessionId, leadPhone, sellerContext) {
+  const existing = callSessions.get(callSessionId);
+  if (existing) {
+    existing.activeConnections++;
+    return existing;
+  }
+
+  const session = {
+    leadPhone,
+    sellerContext,
+    linesSeenAtLastCoachingCheck: 0,
+    lastCoachingTip: null,
+    coachingCheckInProgress: false,
+    coachingRecheckQueued: false,
+    coachingIntervalHandle: null,
+    activeConnections: 1,
+  };
+  callTranscripts.set(leadPhone, []);
+  session.coachingIntervalHandle = setInterval(() => checkForCoachingTip(session), COACHING_CHECK_INTERVAL_MS);
+  callSessions.set(callSessionId, session);
+  return session;
+}
+
+// Called exactly once per connection, when that connection ends (whichever
+// happens first of Twilio's "stop" event or the websocket's own "close" -
+// see the guarded endConnection() below). Only stops the coaching interval
+// and drops the session once activeConnections reaches 0 - i.e. once BOTH
+// of this call's connections have ended, not just the first.
+function releaseCallSession(callSessionId) {
+  const session = callSessions.get(callSessionId);
+  if (!session) return;
+
+  session.activeConnections--;
+  if (session.activeConnections <= 0) {
+    clearInterval(session.coachingIntervalHandle);
+    callSessions.delete(callSessionId);
   }
 }
 
 wss.on("connection", (ws) => {
   console.log("Media stream: Twilio connected to /media-stream");
 
-  // Counts how many audio chunks ("media" events) we've received on this
-  // call (both tracks combined), so we can log a heartbeat every 50 instead
-  // of flooding the console.
+  // Counts how many audio chunks ("media" events) we've received on THIS
+  // connection (i.e. this one leg), so we can log a heartbeat every 50
+  // instead of flooding the console.
   let mediaMessageCount = 0;
 
-  // One Deepgram connection per track, keyed by Twilio's track name
-  // ("inbound" / "outbound").
-  const trackConnections = {};
+  // This connection's single Deepgram connection - each websocket
+  // connection now carries exactly one leg's audio (see /voice and
+  // attachLeadStream(): every stream requests track: "inbound_track"
+  // only), so there's no more per-track dispatch table.
+  let deepgramConnection = null;
 
-  // Rep/Lead label for each track, for THIS call only - starts empty and
-  // gets filled in the first time someone speaks (see assignSpeakerLabels).
-  let trackLabels = {};
-  let speakerAssigned = false;
-  let currentCallSid = null;
+  // "Rep" or "Lead" - read directly from this stream's "role" custom
+  // parameter at "start" (see /voice/attachLeadStream()) and fixed for the
+  // connection's whole lifetime. No first-to-speak heuristic anymore.
+  let myLabel = null;
 
   // The lead's phone number for THIS call, read from the custom parameter
-  // /voice attaches to the stream. Used to save transcript lines under the
-  // right key in callTranscripts, so /call-status can find them later.
+  // /voice/attachLeadStream() attach to the stream. Used to save transcript
+  // lines under the right key in callTranscripts, so /call-status can find
+  // them later.
   let currentLeadPhone = null;
 
-  // This call's rep's seller-context string (see getSellerContextForEmail()
-  // below), resolved once at "start" from the callerEmail custom parameter
-  // /voice attaches to the stream - used to personalize live coaching tips.
-  // "" (never null) if there's no callerEmail or no profile filled in, same
-  // as every other seller-context call site - checkForCoachingTip below
-  // just passes it straight through either way.
-  let currentCallerSellerContext = "";
+  // The shared call-session object (see callSessions above) this
+  // connection joined at "start" - null until then. callSessionId is kept
+  // alongside it so releaseCallSession() can look the session back up by
+  // the same key when this connection ends.
+  let callSessionId = null;
+  let session = null;
 
-  // ── Live AI coaching state, for THIS call only ──────────────────────
-  // How many transcript lines existed the last time we checked for a tip -
-  // lets us skip the AI call if not enough new conversation has happened.
-  let linesSeenAtLastCoachingCheck = 0;
-  // The most recent tip we showed, so we can tell the AI not to repeat it.
-  let lastCoachingTip = null;
-  // True while a coaching AI call is in flight - stops the next trigger
-  // (timer tick OR a new transcript line - see recordFinalLine) from
-  // starting an overlapping second request. No retries happen on top of
-  // this call anymore (see generateCoachingTip in ai/index.js), so this is
-  // now a single request's actual round-trip, not a multi-attempt one.
-  let coachingCheckInProgress = false;
-  // Set when a check was skipped because one was ALREADY in flight (see
-  // above) - instead of that tick just being lost (which used to silently
-  // halve the effective check cadence whenever the AI call ran long), the
-  // in-flight check's own `finally` below sees this flag and immediately
-  // runs one more check right after, using whatever new lines have arrived
-  // in the meantime.
-  let coachingRecheckQueued = false;
-  // The setInterval handle for this call's periodic coaching checks, so we
-  // can stop it once the call ends (see the "stop"/close handling below).
-  let coachingIntervalHandle = null;
-
-  // Looks up the current label for a track. Before anyone has spoken yet,
-  // this just falls back to the raw track name so logging never breaks.
-  function getLabel(track) {
-    return trackLabels[track] || track;
-  }
-
-  // Runs whenever a new final transcript line arrives (see recordFinalLine
-  // below - this is the main trigger now) AND on a timer
-  // (COACHING_CHECK_INTERVAL_MS, a backstop only - see its own comment).
-  // Sends only the most recent slice of the transcript (COACHING_WINDOW_LINES)
-  // to the AI and asks "is a coaching tip worth showing right now?" - most of
-  // the time the answer is no, and nothing gets sent to the browser.
-  async function checkForCoachingTip() {
-    if (!currentLeadPhone) return; // still starting up, nothing to check yet
-
-    if (coachingCheckInProgress) {
-      // A check is already running - rather than just dropping this tick
-      // (which used to mean a slow AI call silently ate the next scheduled
-      // check too), remember to run one more the moment it finishes.
-      coachingRecheckQueued = true;
-      return;
+  // Guards close/stop teardown so it only ever runs once per connection -
+  // Twilio sends "stop" and then closes the socket, and without this guard
+  // both would call releaseCallSession() and double-decrement
+  // activeConnections, potentially tearing the session down while the
+  // OTHER leg's connection is still using it.
+  let ended = false;
+  function endConnection() {
+    if (ended) return;
+    ended = true;
+    if (deepgramConnection) {
+      deepgramConnection.close();
+      deepgramConnection = null;
     }
-
-    const allLines = callTranscripts.get(currentLeadPhone) || [];
-    const newLinesCount = allLines.length - linesSeenAtLastCoachingCheck;
-
-    // Not enough new conversation since last time - skip the AI call
-    // entirely (e.g. the line has gone quiet, or only one short reply).
-    if (newLinesCount < COACHING_MIN_NEW_LINES) return;
-
-    coachingCheckInProgress = true;
-    linesSeenAtLastCoachingCheck = allLines.length;
-
-    try {
-      const recentLines = allLines.slice(-COACHING_WINDOW_LINES);
-      const recentText = transcriptLinesToText(recentLines);
-
-      const tip = await generateCoachingTip(recentText, lastCoachingTip, currentCallerSellerContext);
-      if (!tip) return; // the common case - AI decided nothing was worth flagging
-
-      // Defensive check: even though the prompt tells the AI not to repeat
-      // the last tip, don't trust it blindly - never show the exact same
-      // tip twice in a row.
-      if (tip.trim() === (lastCoachingTip || "").trim()) return;
-
-      lastCoachingTip = tip;
-      broadcastCoachingTip(tip, currentLeadPhone);
-    } finally {
-      coachingCheckInProgress = false;
-      // Something arrived while we were busy - go again right away instead
-      // of waiting for the next trigger (see coachingRecheckQueued above).
-      // Not awaited: this fires the next check and returns immediately, same
-      // fire-and-forget shape as every other caller of checkForCoachingTip.
-      if (coachingRecheckQueued) {
-        coachingRecheckQueued = false;
-        checkForCoachingTip();
-      }
+    if (callSessionId) {
+      releaseCallSession(callSessionId);
     }
-  }
-
-  // Saves one finished transcript line for this call, so the full transcript
-  // is ready by the time /call-status needs it. Stored as { speaker, text }
-  // objects (not pre-joined strings) so the same data can be turned into
-  // plain text (for the AI prompt) OR saved as JSON (for testing) as needed.
-  function recordFinalLine(label, transcript) {
-    if (!currentLeadPhone) return;
-    const lines = callTranscripts.get(currentLeadPhone) || [];
-    lines.push({ speaker: label, text: transcript });
-    callTranscripts.set(currentLeadPhone, lines);
-
-    // Event-driven coaching trigger (the main responsiveness fix): react to
-    // THIS line immediately instead of waiting for the next backstop timer
-    // tick. checkForCoachingTip() is async but deliberately not awaited here -
-    // recordFinalLine is called synchronously from the Deepgram "message"
-    // handler (see openDeepgramConnection above), and must return right away
-    // so it never blocks the transcription/audio path. Safe to fire-and-forget:
-    // checkForCoachingTip() never throws (generateCoachingTip in ai/index.js
-    // catches its own errors and resolves to null), and its own
-    // COACHING_MIN_NEW_LINES/coachingCheckInProgress gating already makes it
-    // a no-op on lines that don't warrant a check, so calling it after every
-    // single line is cheap and never double-fires.
-    checkForCoachingTip();
-  }
-
-  // The first track to produce a real transcript is the rep (their mic is
-  // live from the start, while the lead's line is silent until Twilio
-  // finishes dialing them) - this only runs once per call.
-  function assignSpeakerLabels(firstTrack) {
-    if (speakerAssigned) return;
-    speakerAssigned = true;
-
-    const otherTrack = firstTrack === "inbound" ? "outbound" : "inbound";
-    trackLabels = { [firstTrack]: "Rep", [otherTrack]: "Lead" };
-
-    console.log(
-      `Speaker mapping for call ${currentCallSid}: "${firstTrack}" track spoke first -> Rep, "${otherTrack}" track -> Lead`
-    );
   }
 
   // The ENTIRE body below is wrapped in try/catch - this is an async
@@ -3555,77 +3685,86 @@ wss.on("connection", (ws) => {
       if (data.event === "connected") {
         console.log("Media stream event: connected");
       } else if (data.event === "start") {
-        currentCallSid = data.start.callSid;
-        console.log("Media stream event: start (call SID:", currentCallSid + ")");
+        const callSid = data.start.callSid;
         mediaMessageCount = 0;
-        trackLabels = {};
-        speakerAssigned = false;
 
-        // Read the lead's phone number back out of the custom parameter we
-        // attached to the stream in /voice, and start a fresh transcript for it.
-        const leadPhone = data.start.customParameters && data.start.customParameters.leadPhone;
-        currentLeadPhone = normalizePhoneNumber(leadPhone);
-        callTranscripts.set(currentLeadPhone, []);
+        const params = data.start.customParameters || {};
 
-        // Same idea for the rep's own seller-context profile - see
-        // currentCallerSellerContext's own comment above. Resolved once per
-        // call (not on every coaching check) since it can't change mid-call.
-        const callerEmail = data.start.customParameters && data.start.customParameters.callerEmail;
-        currentCallerSellerContext = await getSellerContextForEmail(callerEmail);
+        // /voice (rep leg) and attachLeadStream() (lead leg) both stamp
+        // "role" explicitly ("rep" or "lead") on every stream they open -
+        // this is the whole fix, no inference. Default to "Rep" (logged
+        // loudly) only in the defensive case where it's somehow missing.
+        if (params.role !== "rep" && params.role !== "lead") {
+          console.error(
+            `Media stream: "start" event had no recognizable role custom parameter (got ${JSON.stringify(
+              params.role
+            )}) - defaulting to Rep. This should not happen; check /voice's TwiML and attachLeadStream().`
+          );
+        }
+        myLabel = params.role === "lead" ? "Lead" : "Rep";
+
+        currentLeadPhone = normalizePhoneNumber(params.leadPhone);
+
+        // Shares one CallSid (this call's original, /voice-minted one)
+        // across both of the call's streams - see /voice's and
+        // attachLeadStream()'s "callSessionId" parameter. Falls back to
+        // this connection's own leg callSid only if that parameter is
+        // somehow missing, in which case this connection simply runs its
+        // own independent (unshared) session rather than crashing.
+        callSessionId = params.callSessionId || callSid;
+
+        // Explicit first-vs-second-leg logging for this call session - a
+        // healthy call should log exactly ONE "1st leg" and ONE "2nd leg"
+        // line, one Rep and one Lead. Checked BEFORE getOrCreateCallSession
+        // (which would otherwise already show the session as existing).
+        const isFirstLegOfCall = !callSessions.has(callSessionId);
+        console.log(
+          `Media stream event: start (call SID: ${callSid}, role: ${myLabel}, session: ${callSessionId}) - ` +
+            `${isFirstLegOfCall ? "1st" : "2nd"} leg to connect for this call session`
+        );
+
+        // Resolved once, on whichever connection actually creates the
+        // session (see getOrCreateCallSession) - harmless to compute here
+        // even when this connection turns out to be the SECOND to arrive,
+        // since /voice and attachLeadStream() both stamp the identical
+        // callerEmail.
+        const sellerContext = await getSellerContextForEmail(params.callerEmail);
         // TEMPORARY diagnostic log - confirms whether seller context is
         // actually reaching the live coaching prompt for a real call, and
         // with what value. Remove once that's verified.
         console.log(
-          `[coaching] seller context for ${callerEmail || "(no callerEmail)"}: ` +
-            (currentCallerSellerContext ? `"${currentCallerSellerContext}"` : "(empty)")
+          `[coaching] seller context for ${params.callerEmail || "(no callerEmail)"}: ` +
+            (sellerContext ? `"${sellerContext}"` : "(empty)")
         );
 
-        // Fresh coaching state for this new call, and start its periodic tip
-        // check running (see checkForCoachingTip above).
-        linesSeenAtLastCoachingCheck = 0;
-        lastCoachingTip = null;
-        coachingIntervalHandle = setInterval(checkForCoachingTip, COACHING_CHECK_INTERVAL_MS);
+        session = getOrCreateCallSession(callSessionId, currentLeadPhone, sellerContext);
 
-        // Open one Deepgram connection per track, so the rep and lead each
-        // get transcribed separately instead of one blended transcript.
-        const trackNames = ["inbound", "outbound"];
-        const connections = await Promise.all(
-          trackNames.map((track) =>
-            openDeepgramConnection(track, currentLeadPhone, getLabel, assignSpeakerLabels, recordFinalLine)
-          )
+        deepgramConnection = await openDeepgramConnection(myLabel, currentLeadPhone, (label, transcript) =>
+          recordFinalLine(session, label, transcript)
         );
-        trackNames.forEach((track, i) => {
-          trackConnections[track] = connections[i];
-        });
       } else if (data.event === "media") {
         mediaMessageCount++;
         if (mediaMessageCount % 50 === 0) {
-          console.log(`Media stream: ${mediaMessageCount} audio chunks received so far`);
+          console.log(`Media stream (${myLabel}): ${mediaMessageCount} audio chunks received so far`);
         }
-
-        // Twilio tells us which track ("inbound"/"outbound") this chunk
-        // belongs to - send it only to that track's Deepgram connection.
-        const track = data.media.track;
-        const connection = trackConnections[track];
 
         // readyState 1 is the standard WebSocket OPEN value (the same
         // check the Deepgram SDK's own sendMedia() does internally before
         // THROWING if it's anything else) - checking it here ourselves
         // means we skip this one audio chunk instead of ever hitting that
-        // throw. A connection can go non-open between chunks (Deepgram-side
-        // drop, or our own close() on "stop"/"close" below) without us
-        // having nulled the reference yet, so `if (connection)` alone
-        // isn't enough - see the audit notes for why this crashed the
-        // server before this fix.
-        if (connection && connection.readyState === 1) {
+        // throw. The connection can go non-open between chunks (Deepgram-
+        // side drop, or our own close() in endConnection() below) without
+        // us having nulled the reference yet, so `if (deepgramConnection)`
+        // alone isn't enough - see the audit notes for why this crashed
+        // the server before this fix.
+        if (deepgramConnection && deepgramConnection.readyState === 1) {
           // Twilio sends audio as base64 text - decode it back to raw bytes.
           const audioBytes = Buffer.from(data.media.payload, "base64");
-          connection.sendMedia(audioBytes);
+          deepgramConnection.sendMedia(audioBytes);
         }
       } else if (data.event === "stop") {
-        console.log("Media stream event: stop (audio stream ended)");
-        closeTrackConnections(trackConnections);
-        clearInterval(coachingIntervalHandle);
+        console.log(`Media stream event: stop (${myLabel} leg's audio stream ended)`);
+        endConnection();
       }
     } catch (error) {
       // Log and move on - never let a single bad frame/dropped connection
@@ -3635,9 +3774,8 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
-    console.log("Media stream: connection closed");
-    closeTrackConnections(trackConnections);
-    clearInterval(coachingIntervalHandle);
+    console.log(`Media stream: connection closed (${myLabel || "role unknown - closed before 'start'"})`);
+    endConnection();
   });
 });
 
